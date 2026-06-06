@@ -23,19 +23,50 @@ export function AuthProvider({ children }) {
   }, [])
 
   async function loadProfile(id) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', id).single()
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', id)
+      .single()
     setProfile(data)
     setLoading(false)
   }
 
   async function signUp(email, password, name) {
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } })
+    // Step 1 - create auth user
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } }
+    })
     if (error) throw error
+
+    // Step 2 - manually create profile row
+    if (data.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: data.user.id,
+          email: email,
+          full_name: name,
+          plan: 'free',
+          shorts_used: 0,
+          shorts_limit: 10
+        }, { onConflict: 'id' })
+
+      if (profileError) {
+        console.error('Profile error:', profileError.message)
+      }
+    }
+
     return data
   }
 
   async function signIn(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
     if (error) throw error
     return data
   }
@@ -45,14 +76,23 @@ export function AuthProvider({ children }) {
   }
 
   async function updateProfile(updates) {
-    const { data, error } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single()
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', user.id)
+      .select()
+      .single()
     if (error) throw error
     setProfile(data)
     return data
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, updateProfile, loadProfile }}>
+    <AuthContext.Provider value={{
+      user, profile, loading,
+      signUp, signIn, signOut,
+      updateProfile, loadProfile
+    }}>
       {children}
     </AuthContext.Provider>
   )
