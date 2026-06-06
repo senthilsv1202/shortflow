@@ -1,0 +1,26 @@
+{
+  "name": "shortflow-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "worker": "node src/worker.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "bull": "^4.12.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.0",
+    "express": "^4.18.0",
+    "express-rate-limit": "^7.1.0",
+    "googleapis": "^128.0.0",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.3.0",
+    "stripe": "^14.10.0",
+    "node-cron": "^3.0.3",
+    "axios": "^1.6.0"
+  }
+}
