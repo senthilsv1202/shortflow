@@ -1,8 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap');
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 
 /* ── THEMES ── */
-.app{--font-head:'Syne',sans-serif;--font-body:'DM Sans',sans-serif}
+.app{--font-head:'Syne',system-ui,sans-serif;--font-body:'DM Sans',system-ui,sans-serif}
 .app,.app.theme-crimson{--bg:#0A0A0F;--bg2:#111118;--bg3:#18181F;--bg4:#22222C;--border:#2A2A38;--border2:#3A3A50;--text:#F0F0F8;--text2:#A0A0C0;--text3:#60607A;--accent:#FF3B3B;--accent2:#FF6060;--abg:rgba(255,59,59,.12);--green:#22C97A;--blue:#4488FF;--amber:#FFB340;--purple:#A855F7;--gbg:rgba(34,201,122,.12);--bbg:rgba(68,136,255,.12);--ybg:rgba(255,179,64,.12);--rbg:rgba(255,60,60,.12)}
 .app.theme-neon{--bg:#050A14;--bg2:#0A1220;--bg3:#0F1830;--bg4:#162240;--border:#1A3050;--border2:#2A4870;--text:#E0F4FF;--text2:#80B4D0;--text3:#405878;--accent:#00D4FF;--accent2:#40E0FF;--abg:rgba(0,212,255,.12)}
 .app.theme-cyber{--bg:#0A050F;--bg2:#120A1E;--bg3:#1A0F2E;--bg4:#22143E;--border:#2A1A48;--border2:#3A2860;--text:#F0E0FF;--text2:#B080D0;--text3:#604880;--accent:#B040FF;--accent2:#C870FF;--abg:rgba(176,64,255,.12)}
