@@ -8,6 +8,7 @@ dotenv.config()
 
 const app = express()
 const PORT = process.env.PORT || 3001
+app.set('trust proxy', 1)
 
 // Clients
 export const supabase = createClient(process.env.SUPABASE_URL || '', process.env.SUPABASE_SERVICE_KEY || '')

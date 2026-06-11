@@ -9,7 +9,12 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // If the URL has an access_token hash (email confirmation redirect),
+    // wait for onAuthStateChange to pick it up instead of resolving immediately
+    const hasAuthHash = window.location.hash.includes('access_token')
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (hasAuthHash) return // let onAuthStateChange handle it
       setUser(session?.user ?? null)
       if (session?.user) loadProfile(session.user.id)
       else setLoading(false)
