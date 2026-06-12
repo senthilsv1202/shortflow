@@ -20,6 +20,7 @@ export default function Library() {
   const [view, setView] = useState('grid')
   const [selected, setSelected] = useState(null)
   const [publishing, setPublishing] = useState(false)
+  const [generatingVideo, setGeneratingVideo] = useState(false)
   const [publishForm, setPublishForm] = useState({ channel_id:'', privacy:'public' })
   const [toast, setToast] = useState('')
 
@@ -49,6 +50,35 @@ export default function Library() {
       showToast('❌ ' + err.message)
     } finally {
       setPublishing(false)
+    }
+  }
+
+  async function handleGenerateVideo() {
+    if (!selected) return
+    setGeneratingVideo(true)
+    showToast('🎬 Video generation started — this takes 1-2 minutes...')
+    try {
+      await api.generateVideo(selected.id)
+      // Poll every 5s until status changes
+      const poll = setInterval(async () => {
+        try {
+          const s = await api.getVideoStatus(selected.id)
+          if (s.status === 'ready') {
+            clearInterval(poll)
+            setGeneratingVideo(false)
+            setShorts(prev => prev.map(x => x.id === selected.id ? { ...x, ...s } : x))
+            setSelected(prev => ({ ...prev, ...s }))
+            showToast('✅ Video ready! You can now publish.')
+          } else if (s.status === 'failed') {
+            clearInterval(poll)
+            setGeneratingVideo(false)
+            showToast('❌ Video generation failed. Check Railway logs.')
+          }
+        } catch { clearInterval(poll); setGeneratingVideo(false) }
+      }, 5000)
+    } catch(err) {
+      setGeneratingVideo(false)
+      showToast('❌ ' + err.message)
     }
   }
 
@@ -179,6 +209,25 @@ export default function Library() {
               </div>
             )}
 
+            {/* Generate Video — for drafts without a video */}
+            {(selected.status === 'draft' || selected.status === 'failed') && !selected.video_url && (
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginTop:4,marginBottom:16}}>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>🎬 Generate Video</div>
+                <div style={{fontSize:12,color:'var(--text3)',marginBottom:12}}>Creates a voiceover + video using ElevenLabs & Creatomate. Takes ~1-2 minutes.</div>
+                <button className="btn btn-accent" style={{width:'100%'}} disabled={generatingVideo} onClick={handleGenerateVideo}>
+                  {generatingVideo ? '⏳ Generating… (check back in 1-2 min)' : '🎬 Generate Video'}
+                </button>
+              </div>
+            )}
+
+            {/* Video ready */}
+            {selected.video_url && (
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginTop:4,marginBottom:16}}>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:8}}>🎬 Video Ready</div>
+                <video src={selected.video_url} controls style={{width:'100%',borderRadius:8,marginBottom:8}} />
+              </div>
+            )}
+
             {/* Publish section — only for drafts */}
             {selected.status === 'draft' && (
               <div style={{borderTop:'1px solid var(--border)',paddingTop:20,marginTop:4}}>
@@ -203,8 +252,8 @@ export default function Library() {
                       </select>
                     </div>
                     <div style={{display:'flex',gap:10}}>
-                      <button className="btn btn-accent" style={{flex:1}} disabled={publishing} onClick={handlePublish}>
-                        {publishing ? 'Publishing...' : '🚀 Publish Now'}
+                      <button className="btn btn-accent" style={{flex:1}} disabled={publishing || !selected.video_url} onClick={handlePublish} title={!selected.video_url ? 'Generate video first' : ''}>
+                        {publishing ? 'Publishing...' : selected.video_url ? '🚀 Publish Now' : '🔒 Generate Video First'}
                       </button>
                       <button className="btn btn-ghost" onClick={()=>handleDelete(selected.id)}>🗑 Delete</button>
                     </div>

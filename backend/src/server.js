@@ -30,6 +30,7 @@ import analyticsRouter from './routes/analytics.js'
 import scheduleRouter from './routes/schedule.js'
 import voiceRouter from './routes/voice.js'
 import publishRouter from './routes/publish.js'
+import videoRouter from './routes/video.js'
 
 app.get('/health', (_, res) => res.json({ status: 'ok', version: '1.0.0', time: new Date().toISOString() }))
 app.use('/api/generate', generateRouter)
@@ -39,6 +40,7 @@ app.use('/api/analytics', analyticsRouter)
 app.use('/api/schedule', scheduleRouter)
 app.use('/api/voice', voiceRouter)
 app.use('/api/publish', publishRouter)
+app.use('/api/video', videoRouter)
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Route not found' }))

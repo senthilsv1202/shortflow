@@ -27,4 +27,6 @@ export const api = {
   generateVoice:   (p) => req('/voice/generate', { method:'POST', body:JSON.stringify(p) }),
   listVoices:      () => req('/voice/list'),
   syncAnalytics:   () => req('/analytics/sync', { method:'POST' }),
+  generateVideo:   (shortId, p) => req(`/video/generate/${shortId}`, { method:'POST', body:JSON.stringify(p||{}) }),
+  getVideoStatus:  (shortId) => req(`/video/status/${shortId}`),
 }
