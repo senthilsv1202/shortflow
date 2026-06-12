@@ -70,7 +70,7 @@ router.post('/:shortId', requireAuth, async (req, res) => {
     if (short.video_url) {
       // Upload actual video file
       const videoRes = await fetch(short.video_url)
-      const videoBuffer = await videoRes.buffer()
+      const videoBuffer = Buffer.from(await videoRes.arrayBuffer())
       const videoStream = Readable.from(videoBuffer)
 
       const uploadRes = await youtube.videos.insert({
@@ -117,7 +117,7 @@ router.post('/:shortId', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Publish error:', err)
     // Update short status to failed
-    await req.supabase.from('shorts').update({ status: 'failed' }).eq('id', shortId).catch(() => {})
+    try { await req.supabase.from('shorts').update({ status: 'failed' }).eq('id', shortId) } catch(_) {}
     res.status(500).json({ error: err.message || 'Failed to publish' })
   }
 })
