@@ -21,35 +21,63 @@ router.get('/auth-url', requireAuth, (req, res) => {
   res.json({ url })
 })
 
+// UUID v4 validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 // OAuth callback (redirect from Google)
 router.get('/callback', async (req, res) => {
-  const { code, state:userId } = req.query
-  if (!code||!userId) return res.redirect(`${process.env.FRONTEND_URL}/channels?error=auth_failed`)
+  const { code, state: userId } = req.query
+  const frontendBase = process.env.FRONTEND_URL
+
+  console.log('[YouTube OAuth] Callback received', {
+    hasCode: !!code,
+    hasState: !!userId,
+    stateValue: userId ? `${String(userId).slice(0, 8)}...` : null
+  })
+
+  if (!code || !userId || typeof userId !== 'string' || userId.trim() === '') {
+    console.warn('[YouTube OAuth] Missing code or state parameter')
+    return res.redirect(`${frontendBase}/channels?error=${encodeURIComponent('auth_failed')}`)
+  }
+
+  if (!UUID_REGEX.test(userId)) {
+    console.warn('[YouTube OAuth] Invalid state parameter — not a valid UUID:', userId)
+    return res.redirect(`${frontendBase}/channels?error=${encodeURIComponent('auth_failed')}`)
+  }
+
   try {
     const client = getOAuth2Client()
     const { tokens } = await client.getToken(code)
     client.setCredentials(tokens)
-    const yt = google.youtube({ version:'v3', auth:client })
-    const { data } = await yt.channels.list({ part:'snippet,statistics', mine:true })
+
+    console.log('[YouTube OAuth] Tokens exchanged successfully for user:', userId.slice(0, 8))
+
+    const yt = google.youtube({ version: 'v3', auth: client })
+    const { data } = await yt.channels.list({ part: 'snippet,statistics', mine: true })
     const ch = data.items?.[0]
     if (!ch) throw new Error('No channel found')
+
+    console.log('[YouTube OAuth] Channel found:', ch.snippet?.title)
+
     const { createClient } = await import('@supabase/supabase-js')
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
     await sb.from('channels').upsert({
-      user_id:userId, youtube_channel_id:ch.id,
-      name:ch.snippet.title, handle:ch.snippet.customUrl,
-      thumbnail:ch.snippet.thumbnails?.default?.url,
-      subscribers:parseInt(ch.statistics.subscriberCount||0),
-      total_views:parseInt(ch.statistics.viewCount||0),
-      video_count:parseInt(ch.statistics.videoCount||0),
-      access_token:tokens.access_token, refresh_token:tokens.refresh_token,
-      token_expiry:tokens.expiry_date?new Date(tokens.expiry_date).toISOString():null,
-      ypp_eligible:parseInt(ch.statistics.subscriberCount||0)>=1000
+      user_id: userId, youtube_channel_id: ch.id,
+      name: ch.snippet.title, handle: ch.snippet.customUrl,
+      thumbnail: ch.snippet.thumbnails?.default?.url,
+      subscribers: parseInt(ch.statistics.subscriberCount || 0),
+      total_views: parseInt(ch.statistics.viewCount || 0),
+      video_count: parseInt(ch.statistics.videoCount || 0),
+      access_token: tokens.access_token, refresh_token: tokens.refresh_token,
+      token_expiry: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+      ypp_eligible: parseInt(ch.statistics.subscriberCount || 0) >= 1000
     })
-    res.redirect(`${process.env.FRONTEND_URL}/channels?connected=true`)
-  } catch(err) {
-    console.error('YouTube callback error:',err)
-    res.redirect(`${process.env.FRONTEND_URL}/channels?error=${encodeURIComponent(err.message)}`)
+
+    console.log('[YouTube OAuth] Channel upserted successfully for user:', userId.slice(0, 8))
+    res.redirect(`${frontendBase}/channels?connected=true`)
+  } catch (err) {
+    console.error('[YouTube OAuth] Callback error:', err)
+    res.redirect(`${frontendBase}/channels?error=${encodeURIComponent(err.message || 'auth_failed')}`)
   }
 })
 
