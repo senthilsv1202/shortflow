@@ -141,8 +141,8 @@ SEO Score:   88 / 100
 
 After generation you'll see a results card with the full script, scores, and metadata.
 
-- Click **Save to Library** to store it as a draft
-- Click **Create Another** to start fresh
+- Click **Save to Library →** to store it as a draft
+- Click **+ New Short** to start fresh
 - Go to **📚 Library** in the sidebar to see all your shorts
 
 In the Library you can:

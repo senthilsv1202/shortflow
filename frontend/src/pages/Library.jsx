@@ -1,93 +1,227 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth.jsx'
-import { db } from '../lib/supabase.js'
+import { db, supabase } from '../lib/supabase.js'
+import { api } from '../lib/api.js'
 
 const STATUSES = ['all','draft','published','scheduled','failed']
-const MOCK = [
-  {id:1,title:'10 Python Tips That Will Blow Your Mind',status:'published',views:42100,likes:1840,niche:'Tech & Programming',created_at:'2024-01-15',emoji:'🔥',viral_score:88,seo_score:91},
-  {id:2,title:'Why Developers Fail at Coding Interviews',status:'published',views:28400,likes:1200,niche:'Tech & Programming',created_at:'2024-01-14',emoji:'💡',viral_score:74,seo_score:82},
-  {id:3,title:'Build a SaaS in 30 Days — Full Roadmap',status:'scheduled',views:0,likes:0,niche:'Business',created_at:'2024-01-13',emoji:'🚀',viral_score:81,seo_score:88},
-  {id:4,title:'The Dark Side of Social Media Algorithms',status:'published',views:91700,likes:4200,niche:'Tech & Programming',created_at:'2024-01-12',emoji:'📱',viral_score:94,seo_score:90},
-  {id:5,title:'AI Tools Every Creator Needs in 2025',status:'draft',views:0,likes:0,niche:'Tech & Programming',created_at:'2024-01-11',emoji:'🧠',viral_score:79,seo_score:85},
-  {id:6,title:'5 Money Habits Nobody Teaches You',status:'published',views:67300,likes:3100,niche:'Finance',created_at:'2024-01-10',emoji:'💰',viral_score:92,seo_score:87},
-]
-const STATUS_COLORS = { published:{color:'#22C97A',bg:'rgba(34,201,122,.12)'}, draft:{color:'var(--text3)',bg:'var(--bg4)'}, scheduled:{color:'#4488FF',bg:'rgba(68,136,255,.12)'}, failed:{color:'#FF6060',bg:'rgba(255,60,60,.12)'} }
+const STATUS_COLORS = {
+  published: { color:'#22C97A', bg:'rgba(34,201,122,.12)' },
+  draft:     { color:'var(--text3)', bg:'var(--bg4)' },
+  scheduled: { color:'#4488FF', bg:'rgba(68,136,255,.12)' },
+  failed:    { color:'#FF6060', bg:'rgba(255,60,60,.12)' }
+}
 
 export default function Library() {
   const { user } = useAuth()
   const [shorts, setShorts] = useState([])
+  const [channels, setChannels] = useState([])
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [view, setView] = useState('grid')
+  const [selected, setSelected] = useState(null)
+  const [publishing, setPublishing] = useState(false)
+  const [publishForm, setPublishForm] = useState({ channel_id:'', privacy:'public' })
+  const [toast, setToast] = useState('')
 
-  useEffect(()=>{ if(user) db.getShorts(user.id).then(d=>setShorts(d.length?d:MOCK)).catch(()=>setShorts(MOCK)) },[user])
+  useEffect(() => {
+    if (user) {
+      db.getShorts(user.id).then(d => setShorts(d))
+      db.getChannels(user.id).then(d => setChannels(d))
+    }
+  }, [user])
 
-  const filtered = shorts.filter(s=>{
-    if (filter!=='all' && s.status!==filter) return false
+  function showToast(msg) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3000)
+  }
+
+  async function handlePublish() {
+    if (!selected) return
+    if (!publishForm.channel_id) { showToast('Please select a channel'); return }
+    setPublishing(true)
+    try {
+      await api.publishNow(selected.id, publishForm)
+      await db.updateShort(selected.id, { status: 'published' })
+      setShorts(s => s.map(x => x.id === selected.id ? { ...x, status:'published' } : x))
+      setSelected(null)
+      showToast('✅ Published to YouTube!')
+    } catch(err) {
+      showToast('❌ ' + err.message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('Delete this short?')) return
+    await db.deleteShort(id)
+    setShorts(s => s.filter(x => x.id !== id))
+    setSelected(null)
+  }
+
+  const filtered = shorts.filter(s => {
+    if (filter !== 'all' && s.status !== filter) return false
     if (search && !s.title.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
   return (
     <div className="fade-in">
+      {/* Toast */}
+      {toast && (
+        <div style={{position:'fixed',top:20,right:20,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 18px',fontSize:13,zIndex:999,boxShadow:'0 4px 20px rgba(0,0,0,.3)'}}>
+          {toast}
+        </div>
+      )}
+
       <div className="page-header">
         <div className="page-title">📁 My Library</div>
         <div className="page-desc">{shorts.length} shorts total</div>
       </div>
+
       <div style={{display:'flex',gap:12,marginBottom:20,flexWrap:'wrap',alignItems:'center'}}>
         <input className="form-input" style={{maxWidth:280}} placeholder="Search shorts..." value={search} onChange={e=>setSearch(e.target.value)} />
         <div style={{display:'flex',gap:6,flex:1}}>
-          {STATUSES.map(s=><button key={s} className={`btn ${filter===s?'btn-accent':'btn-ghost'} btn-sm`} style={{textTransform:'capitalize'}} onClick={()=>setFilter(s)}>{s}</button>)}
+          {STATUSES.map(s=>(
+            <button key={s} className={`btn ${filter===s?'btn-accent':'btn-ghost'} btn-sm`} style={{textTransform:'capitalize'}} onClick={()=>setFilter(s)}>{s}</button>
+          ))}
         </div>
         <div style={{display:'flex',gap:4}}>
           <button className={`btn btn-sm ${view==='grid'?'btn-accent':'btn-ghost'}`} onClick={()=>setView('grid')}>⊞</button>
           <button className={`btn btn-sm ${view==='list'?'btn-accent':'btn-ghost'}`} onClick={()=>setView('list')}>☰</button>
         </div>
       </div>
-      {filtered.length===0 ? <div className="empty"><div className="empty-icon">📁</div><div className="empty-text">No shorts found</div></div> : (
-        view==='grid' ? (
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
-            {filtered.map(s=>(
-              <div key={s.id} className="video-card">
-                <div style={{height:120,background:'var(--bg3)',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',fontSize:36,opacity:.2}}>
-                  {s.emoji||'🎬'}
-                  <div style={{position:'absolute',top:8,right:8}}><span className="tag" style={{fontSize:10,background:STATUS_COLORS[s.status]?.bg,color:STATUS_COLORS[s.status]?.color}}>{s.status}</span></div>
-                </div>
-                <div style={{padding:'11px 13px'}}>
-                  <div style={{fontSize:13,fontWeight:500,marginBottom:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.title}</div>
-                  <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text3)'}}>
-                    <span>👁 {s.views?.toLocaleString()||'—'}</span>
-                    <span>❤️ {s.likes?.toLocaleString()||'—'}</span>
-                    <span>{new Date(s.created_at).toLocaleDateString()}</span>
-                  </div>
-                  {s.viral_score && <div style={{display:'flex',gap:6,marginTop:8}}>
-                    <span className="tag tag-accent" style={{fontSize:10}}>Viral {s.viral_score}%</span>
-                    <span className="tag tag-green" style={{fontSize:10}}>SEO {s.seo_score}%</span>
-                  </div>}
+
+      {shorts.length === 0 ? (
+        <div className="empty">
+          <div className="empty-icon">📁</div>
+          <div className="empty-text">No shorts yet — go create one!</div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="empty"><div className="empty-icon">🔍</div><div className="empty-text">No shorts match your filter</div></div>
+      ) : view === 'grid' ? (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
+          {filtered.map(s=>(
+            <div key={s.id} className="video-card" style={{cursor:'pointer'}} onClick={()=>setSelected(s)}>
+              <div style={{height:120,background:'var(--bg3)',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',fontSize:36,opacity:.2}}>
+                🎬
+                <div style={{position:'absolute',top:8,right:8}}>
+                  <span className="tag" style={{fontSize:10,background:STATUS_COLORS[s.status]?.bg,color:STATUS_COLORS[s.status]?.color}}>{s.status}</span>
                 </div>
               </div>
-            ))}
+              <div style={{padding:'11px 13px'}}>
+                <div style={{fontSize:13,fontWeight:500,marginBottom:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.title}</div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text3)'}}>
+                  <span>👁 {s.views?.toLocaleString()||'0'}</span>
+                  <span>❤️ {s.likes?.toLocaleString()||'0'}</span>
+                  <span>{new Date(s.created_at).toLocaleDateString()}</span>
+                </div>
+                {s.viral_score && <div style={{display:'flex',gap:6,marginTop:8}}>
+                  <span className="tag tag-accent" style={{fontSize:10}}>Viral {s.viral_score}%</span>
+                  <span className="tag tag-green" style={{fontSize:10}}>SEO {s.seo_score}%</span>
+                </div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="card">
+          <table className="data-table">
+            <thead><tr><th>Title</th><th>Status</th><th>Views</th><th>Likes</th><th>Niche</th><th>Date</th><th>Actions</th></tr></thead>
+            <tbody>
+              {filtered.map(s=>(
+                <tr key={s.id}>
+                  <td style={{maxWidth:280,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',color:'var(--text)'}}>{s.title}</td>
+                  <td><span className="tag" style={{fontSize:10,background:STATUS_COLORS[s.status]?.bg,color:STATUS_COLORS[s.status]?.color}}>{s.status}</span></td>
+                  <td>{s.views?.toLocaleString()||'0'}</td>
+                  <td>{s.likes?.toLocaleString()||'0'}</td>
+                  <td>{s.niche||'—'}</td>
+                  <td>{new Date(s.created_at).toLocaleDateString()}</td>
+                  <td style={{display:'flex',gap:6}}>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>setSelected(s)}>View</button>
+                    {s.status==='draft' && <button className="btn btn-accent btn-sm" onClick={()=>setSelected(s)}>Publish</button>}
+                    <button className="btn btn-sm" style={{background:'rgba(255,60,60,.15)',color:'#FF6060',border:'none'}} onClick={()=>handleDelete(s.id)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Short Detail / Publish Modal */}
+      {selected && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.7)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setSelected(null)}}>
+          <div style={{background:'var(--bg2)',borderRadius:16,padding:28,width:'100%',maxWidth:600,maxHeight:'85vh',overflowY:'auto',border:'1px solid var(--border)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>{selected.title}</div>
+                <span className="tag" style={{fontSize:10,background:STATUS_COLORS[selected.status]?.bg,color:STATUS_COLORS[selected.status]?.color}}>{selected.status}</span>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setSelected(null)}>✕</button>
+            </div>
+
+            {/* Script */}
+            {selected.script && (
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:12,fontWeight:600,color:'var(--text3)',marginBottom:8,textTransform:'uppercase',letterSpacing:.5}}>Script</div>
+                <div style={{background:'var(--bg3)',borderRadius:8,padding:14,fontSize:13,lineHeight:1.7,whiteSpace:'pre-wrap',color:'var(--text)'}}>{selected.script}</div>
+              </div>
+            )}
+
+            {/* Tags */}
+            {selected.tags?.length > 0 && (
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:12,fontWeight:600,color:'var(--text3)',marginBottom:8,textTransform:'uppercase',letterSpacing:.5}}>Tags</div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                  {selected.tags.map(t=><span key={t} className="tag" style={{fontSize:11}}>{t}</span>)}
+                </div>
+              </div>
+            )}
+
+            {/* Publish section — only for drafts */}
+            {selected.status === 'draft' && (
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:20,marginTop:4}}>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>🚀 Publish to YouTube</div>
+                {channels.length === 0 ? (
+                  <div style={{fontSize:13,color:'var(--text3)'}}>No channels connected. Go to <b>Channels</b> to connect your YouTube account first.</div>
+                ) : (
+                  <>
+                    <div style={{marginBottom:12}}>
+                      <label style={{fontSize:12,fontWeight:600,color:'var(--text3)',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Channel</label>
+                      <select className="form-input" value={publishForm.channel_id} onChange={e=>setPublishForm(f=>({...f,channel_id:e.target.value}))}>
+                        <option value="">Select channel...</option>
+                        {channels.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div style={{marginBottom:16}}>
+                      <label style={{fontSize:12,fontWeight:600,color:'var(--text3)',display:'block',marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Privacy</label>
+                      <select className="form-input" value={publishForm.privacy} onChange={e=>setPublishForm(f=>({...f,privacy:e.target.value}))}>
+                        <option value="public">Public</option>
+                        <option value="unlisted">Unlisted</option>
+                        <option value="private">Private</option>
+                      </select>
+                    </div>
+                    <div style={{display:'flex',gap:10}}>
+                      <button className="btn btn-accent" style={{flex:1}} disabled={publishing} onClick={handlePublish}>
+                        {publishing ? 'Publishing...' : '🚀 Publish Now'}
+                      </button>
+                      <button className="btn btn-ghost" onClick={()=>handleDelete(selected.id)}>🗑 Delete</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {selected.status === 'published' && selected.youtube_video_id && (
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginTop:4}}>
+                <a href={`https://youtube.com/shorts/${selected.youtube_video_id}`} target="_blank" rel="noreferrer" className="btn btn-accent" style={{display:'inline-block'}}>
+                  ▶ View on YouTube
+                </a>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="card">
-            <table className="data-table">
-              <thead><tr><th>Title</th><th>Status</th><th>Views</th><th>Likes</th><th>Niche</th><th>Date</th><th>Actions</th></tr></thead>
-              <tbody>
-                {filtered.map(s=>(
-                  <tr key={s.id}>
-                    <td style={{maxWidth:280,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',color:'var(--text)'}}>{s.title}</td>
-                    <td><span className="tag" style={{fontSize:10,background:STATUS_COLORS[s.status]?.bg,color:STATUS_COLORS[s.status]?.color}}>{s.status}</span></td>
-                    <td>{s.views?.toLocaleString()||'—'}</td>
-                    <td>{s.likes?.toLocaleString()||'—'}</td>
-                    <td>{s.niche||'—'}</td>
-                    <td>{new Date(s.created_at).toLocaleDateString()}</td>
-                    <td><button className="btn btn-ghost btn-sm">Edit</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
+        </div>
       )}
     </div>
   )
