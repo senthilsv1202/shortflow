@@ -228,8 +228,8 @@ export default function Library() {
               </div>
             )}
 
-            {/* Publish section — only for drafts */}
-            {selected.status === 'draft' && (
+            {/* Publish section — for drafts and ready shorts */}
+            {(selected.status === 'draft' || selected.status === 'ready') && (
               <div style={{borderTop:'1px solid var(--border)',paddingTop:20,marginTop:4}}>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>🚀 Publish to YouTube</div>
                 {channels.length === 0 ? (
