@@ -40,22 +40,22 @@ router.post('/:shortId', requireAuth, async (req, res) => {
     if (chErr || !channel) return res.status(404).json({ error: 'Channel not found' })
     if (!channel.access_token) return res.status(400).json({ error: 'Channel not connected via OAuth' })
 
-    // 3. Set up YouTube OAuth
+    // 3. Set up YouTube OAuth and force token refresh
     const auth = getOAuth2Client()
     auth.setCredentials({
       access_token: channel.access_token,
       refresh_token: channel.refresh_token,
     })
 
-    // Auto-refresh token if needed
-    auth.on('tokens', async (tokens) => {
-      if (tokens.access_token) {
-        await req.supabase.from('channels').update({
-          access_token: tokens.access_token,
-          token_expiry: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null
-        }).eq('id', channel_id)
-      }
-    })
+    // Force refresh to get a valid access token
+    const { credentials } = await auth.refreshAccessToken()
+    auth.setCredentials(credentials)
+
+    // Save refreshed token back to DB
+    await req.supabase.from('channels').update({
+      access_token: credentials.access_token,
+      token_expiry: credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : null
+    }).eq('id', channel_id)
 
     const youtube = google.youtube({ version: 'v3', auth })
 
