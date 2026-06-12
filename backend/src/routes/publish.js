@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { google } from 'googleapis'
 import { requireAuth } from '../middleware/auth.js'
 import { Readable } from 'stream'
-import fetch from 'node-fetch'
 
 const router = Router()
 
