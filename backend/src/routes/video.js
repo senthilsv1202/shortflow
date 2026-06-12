@@ -199,27 +199,29 @@ router.post('/generate/:shortId', requireAuth, async (req, res) => {
 
   ;(async () => {
     try {
-      // Step 1: Generate voiceover
-      console.log(`[video] Generating voiceover for short ${shortId}`)
-      const scriptText = short.script || short.hook || short.title
-      const audioBuffer = await generateVoiceover(scriptText, voice_id)
+      // Step 1: Generate voiceover (optional — skip if no API key)
+      let voiceoverUrl = null
+      if (process.env.ELEVENLABS_API_KEY) {
+        try {
+          console.log(`[video] Generating voiceover for short ${shortId}`)
+          const scriptText = short.script || short.hook || short.title
+          const audioBuffer = await generateVoiceover(scriptText, voice_id)
+          const audioFilename = `${req.user.id}/${shortId}/voiceover.mp3`
+          voiceoverUrl = await uploadToSupabase(req.supabase, audioBuffer, audioFilename, 'audio/mpeg')
+          await req.supabase.from('shorts').update({ voiceover_url: voiceoverUrl }).eq('id', shortId)
+        } catch(err) {
+          console.warn(`[video] Voiceover skipped: ${err.message}`)
+        }
+      }
 
-      // Step 2: Upload audio to Supabase Storage
-      console.log(`[video] Uploading audio for short ${shortId}`)
-      const audioFilename = `${req.user.id}/${shortId}/voiceover.mp3`
-      const voiceoverUrl = await uploadToSupabase(req.supabase, audioBuffer, audioFilename, 'audio/mpeg')
-
-      // Save voiceover_url
-      await req.supabase.from('shorts').update({ voiceover_url: voiceoverUrl }).eq('id', shortId)
-
-      // Step 3: Assemble video
+      // Step 2: Assemble video
       console.log(`[video] Assembling video for short ${shortId}`)
       const videoUrl = await assembleVideoCreatomate(short, voiceoverUrl)
 
-      // Step 4: Save video_url and mark ready
+      // Step 3: Save video_url and mark ready
       await req.supabase.from('shorts').update({
         video_url: videoUrl,
-        voiceover_url: voiceoverUrl,
+        ...(voiceoverUrl ? { voiceover_url: voiceoverUrl } : {}),
         status: 'ready'
       }).eq('id', shortId)
 
