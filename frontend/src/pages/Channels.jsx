@@ -13,7 +13,7 @@ export default function Channels() {
   const [channels, setChannels] = useState([])
   const [connecting, setConnecting] = useState(false)
 
-  useEffect(()=>{ if(user) db.getChannels(user.id).then(d=>setChannels(d.length?d:MOCK_CHANNELS)).catch(()=>setChannels(MOCK_CHANNELS)) },[user])
+  useEffect(()=>{ if(user) db.getChannels(user.id).then(d=>setChannels(d)).catch(err=>console.error('getChannels error:',err)) },[user])
 
   async function connectYouTube() {
     setConnecting(true)
