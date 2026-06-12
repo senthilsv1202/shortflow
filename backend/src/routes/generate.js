@@ -38,7 +38,7 @@ Return ONLY valid JSON, no markdown fences:
 }`
 
     const msg = await anthropic.messages.create({
-      model:'claude-sonnet-4-20250514', max_tokens:2000,
+      model:'claude-3-5-sonnet-20241022', max_tokens:2000,
       system:'You are an expert YouTube Shorts creator. Return ONLY valid JSON, no markdown.',
       messages:[{ role:'user', content:prompt }]
     })
@@ -60,7 +60,7 @@ router.post('/script', requireAuth, async (req, res) => {
   const { topic, tone='Engaging', duration='60' } = req.body
   try {
     const msg = await anthropic.messages.create({
-      model:'claude-sonnet-4-20250514', max_tokens:800,
+      model:'claude-3-5-sonnet-20241022', max_tokens:800,
       messages:[{ role:'user', content:`Write a ${duration} second YouTube Shorts script about: ${topic}. Tone: ${tone}. Return only the script.` }]
     })
     res.json({ script:msg.content[0].text })
@@ -71,7 +71,7 @@ router.get('/trends', requireAuth, async (req, res) => {
   const { niche='General' } = req.query
   try {
     const msg = await anthropic.messages.create({
-      model:'claude-sonnet-4-20250514', max_tokens:600,
+      model:'claude-3-5-sonnet-20241022', max_tokens:600,
       messages:[{ role:'user', content:`List 8 trending YouTube Shorts topics for the "${niche}" niche right now in 2025. Return ONLY JSON array: [{"topic":"...","viral_potential":"high","reason":"..."}]` }]
     })
     const data = JSON.parse(msg.content[0].text.replace(/```json|```/g,'').trim())
