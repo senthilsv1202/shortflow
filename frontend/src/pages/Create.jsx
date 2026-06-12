@@ -36,7 +36,8 @@ export default function Create() {
     try {
       const data = await api.generateShort(form)
       clearInterval(iv); setProgress(100)
-      const saved = await db.createShort({ user_id:user.id, ...data, topic:form.topic, niche:form.niche, style:form.style, tone:form.tone, language:form.language, status:'draft' })
+      const { duration, ...saveData } = data
+      const saved = await db.createShort({ user_id:user.id, ...saveData, duration_estimate:duration, topic:form.topic, niche:form.niche, style:form.style, tone:form.tone, language:form.language, status:'draft' })
       setResult({...data, id:saved.id})
     } catch(err) {
       clearInterval(iv); setProgress(100)
@@ -53,7 +54,8 @@ export default function Create() {
         key_points: [`Key insight about ${form.topic}`, 'Supporting point', 'Call to action']
       }
       try {
-        const saved = await db.createShort({ user_id:user.id, ...fallback, topic:form.topic, niche:form.niche, style:form.style, tone:form.tone, language:form.language, status:'draft' })
+        const { duration, ...fallbackData } = fallback
+        const saved = await db.createShort({ user_id:user.id, ...fallbackData, duration_estimate:duration, topic:form.topic, niche:form.niche, style:form.style, tone:form.tone, language:form.language, status:'draft' })
         setResult({ ...fallback, id: saved.id })
       } catch(saveErr) {
         setError('Failed to save short. Please check your connection.')
