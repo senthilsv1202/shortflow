@@ -47,13 +47,33 @@ async function uploadToSupabase(supabase, buffer, filename, contentType) {
   return publicUrl
 }
 
+function buildScenes(short) {
+  // Break script into timed scenes for sync with voiceover
+  const rawScript = short.script || short.hook || short.title || ''
+  // Split by line breaks or sentence endings
+  const lines = rawScript
+    .split(/\n+/)
+    .map(l => l.replace(/\[.*?\]/g, '').trim()) // remove [HOOK] [CTA] markers
+    .filter(l => l.length > 10)
+    .slice(0, 8) // max 8 scenes
+
+  if (lines.length === 0) lines.push(short.title || 'Watch this!')
+
+  const totalDuration = 58
+  const sceneDuration = totalDuration / lines.length
+
+  return lines.map((line, i) => ({
+    time: i * sceneDuration,
+    duration: sceneDuration,
+    text: line
+  }))
+}
+
 async function assembleVideoCreatomate(short, audioUrl) {
   const apiKey = process.env.CREATOMATE_API_KEY
   if (!apiKey) throw new Error('CREATOMATE_API_KEY not set')
 
-  // Split script into chunks for text overlay (max ~200 chars each)
-  const script = short.script || short.hook || short.title
-  const chunks = script.match(/.{1,180}(\s|$)/g) || [script]
+  const scenes = buildScenes(short)
   const duration = 60 // seconds
 
   const res = await fetch('https://api.creatomate.com/v1/renders', {
@@ -71,7 +91,7 @@ async function assembleVideoCreatomate(short, audioUrl) {
         height: 1920,
         duration,
         elements: [
-          // Black background
+          // Background — full duration
           {
             type: 'shape',
             shape: 'rect',
@@ -83,52 +103,66 @@ async function assembleVideoCreatomate(short, audioUrl) {
             x_alignment: '50%',
             y_alignment: '50%',
           },
-          // Title text
+          // Title — shown first 4 seconds
           {
             type: 'text',
-            text: short.title || short.topic || 'ShortFlow',
+            text: short.title || short.topic || '',
             font_family: 'Montserrat',
             font_weight: '800',
-            font_size: '52 vmin',
-            fill_color: '#FFFFFF',
+            font_size: '7 vmin',
+            fill_color: '#FF3B3B',
             width: '85%',
             x: '50%',
-            y: '18%',
+            y: '12%',
             x_alignment: '50%',
             y_alignment: '50%',
+            time: 0,
+            duration: duration,
           },
-          // Hook / script text
-          {
+          // Timed script scenes — each line appears at the right time
+          ...scenes.map((scene, i) => ({
             type: 'text',
-            text: short.hook || chunks[0] || '',
+            text: scene.text,
             font_family: 'Montserrat',
-            font_weight: '500',
-            font_size: '38 vmin',
-            fill_color: '#F0F0F0',
+            font_weight: i === 0 ? '700' : '500',
+            font_size: i === 0 ? '8 vmin' : '6.5 vmin',
+            fill_color: i === 0 ? '#FFFFFF' : '#E0E0E0',
             width: '85%',
             x: '50%',
             y: '50%',
             x_alignment: '50%',
             y_alignment: '50%',
-          },
-          // CTA text
+            time: scene.time,
+            duration: scene.duration,
+            animations: [
+              { time: 'start', duration: 0.4, easing: 'quadratic-out', type: 'slide', direction: '270°' },
+              { time: 'end', duration: 0.3, easing: 'quadratic-in', type: 'fade' }
+            ]
+          })),
+          // CTA — last 5 seconds
           {
             type: 'text',
-            text: short.cta || 'Follow for more!',
+            text: short.cta || 'Follow for more! 🔥',
             font_family: 'Montserrat',
-            font_weight: '700',
-            font_size: '36 vmin',
+            font_weight: '800',
+            font_size: '7 vmin',
             fill_color: '#FF3B3B',
             width: '85%',
             x: '50%',
             y: '85%',
             x_alignment: '50%',
             y_alignment: '50%',
+            time: duration - 5,
+            duration: 5,
+            animations: [
+              { time: 'start', duration: 0.5, type: 'fade' }
+            ]
           },
-          // Audio track (only if voiceover exists)
+          // Audio track
           ...(audioUrl ? [{
             type: 'audio',
             source: audioUrl,
+            time: 0,
           }] : []),
         ]
       },
