@@ -73,20 +73,23 @@ async function assembleVideoCreatomate(short, audioUrl) {
         elements: [
           // Black background
           {
-            type: 'rectangle',
+            type: 'shape',
+            shape: 'rect',
             width: '100%',
             height: '100%',
             fill_color: '#0A0A0F',
             x: '50%',
             y: '50%',
+            x_alignment: '50%',
+            y_alignment: '50%',
           },
           // Title text
           {
             type: 'text',
-            text: short.title || short.topic,
+            text: short.title || short.topic || 'ShortFlow',
             font_family: 'Montserrat',
             font_weight: '800',
-            font_size: '52px',
+            font_size: '52 vmin',
             fill_color: '#FFFFFF',
             width: '85%',
             x: '50%',
@@ -94,13 +97,13 @@ async function assembleVideoCreatomate(short, audioUrl) {
             x_alignment: '50%',
             y_alignment: '50%',
           },
-          // Script / hook text
+          // Hook / script text
           {
             type: 'text',
-            text: chunks[0] || '',
+            text: short.hook || chunks[0] || '',
             font_family: 'Montserrat',
             font_weight: '500',
-            font_size: '38px',
+            font_size: '38 vmin',
             fill_color: '#F0F0F0',
             width: '85%',
             x: '50%',
@@ -108,23 +111,13 @@ async function assembleVideoCreatomate(short, audioUrl) {
             x_alignment: '50%',
             y_alignment: '50%',
           },
-          // Accent bar
-          {
-            type: 'rectangle',
-            width: '120px',
-            height: '8px',
-            fill_color: '#FF3B3B',
-            x: '50%',
-            y: '75%',
-            x_alignment: '50%',
-          },
           // CTA text
           {
             type: 'text',
             text: short.cta || 'Follow for more!',
             font_family: 'Montserrat',
             font_weight: '700',
-            font_size: '36px',
+            font_size: '36 vmin',
             fill_color: '#FF3B3B',
             width: '85%',
             x: '50%',
@@ -132,12 +125,11 @@ async function assembleVideoCreatomate(short, audioUrl) {
             x_alignment: '50%',
             y_alignment: '50%',
           },
-          // Audio track
-          {
+          // Audio track (only if voiceover exists)
+          ...(audioUrl ? [{
             type: 'audio',
             source: audioUrl,
-            duration,
-          }
+          }] : []),
         ]
       },
       modifications: process.env.CREATOMATE_TEMPLATE_ID ? {
