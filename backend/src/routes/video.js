@@ -136,14 +136,14 @@ async function buildVideoFFmpeg(short, audioPath, outputPath) {
   // Title — always visible
   filters.push(
     `drawtext=text='${title}':` +
-    `fontsize=52:fontcolor=white:fontweight=bold:` +
+    `fontsize=50:fontcolor=white:` +
     `x=(w-text_w)/2:y=120:` +
     `enable='between(t,0,${totalDuration})'`
   )
 
   // Red accent line under title
   filters.push(
-    `drawbox=x=(w-200)/2:y=200:w=200:h=6:color=0xFF3B3B:t=fill:` +
+    `drawbox=x=(w-200)/2:y=200:w=200:h=6:color=FF3B3B:t=fill:` +
     `enable='between(t,0,${totalDuration})'`
   )
 
@@ -151,34 +151,35 @@ async function buildVideoFFmpeg(short, audioPath, outputPath) {
   scenes.forEach((scene, i) => {
     const t0 = scene.time.toFixed(2)
     const t1 = (scene.time + scene.duration - 0.3).toFixed(2)
-    const wrapped = wrapText(scene.text, 26)
+    const wrapped = wrapText(scene.text, 24)
     const escapedText = escapeFFmpegText(wrapped)
 
+    const cardY = Math.round(H * 0.38)
+    const cardH = 320
+
     // Card background box
-    const cardY = H * 0.38
-    const cardH = 280
     filters.push(
       `drawbox=x=60:y=${cardY}:w=${W - 120}:h=${cardH}:` +
-      `color=${scene.isHook ? '0xFF3B3B@0.2' : '0xFFFFFF@0.08'}:t=fill:` +
+      `color=${scene.isHook ? 'FF3B3B' : 'FFFFFF'}@0.1:t=fill:` +
       `enable='between(t,${t0},${t1})'`
     )
 
-    // Step number (for middle scenes only)
+    // Step number (middle scenes only)
     if (scene.stepNum !== null) {
       filters.push(
         `drawtext=text='${scene.stepNum}':` +
-        `fontsize=100:fontcolor=0xFF3B3B:fontweight=bold:` +
-        `x=100:y=${cardY + 80}:` +
+        `fontsize=110:fontcolor=FF3B3B:` +
+        `x=90:y=${cardY + 90}:` +
         `enable='between(t,${t0},${t1})'`
       )
     }
 
     // Scene text
-    const textX = scene.stepNum !== null ? 220 : `(w-text_w)/2`
+    const textX = scene.stepNum !== null ? `210` : `(w-text_w)/2`
     filters.push(
       `drawtext=text='${escapedText}':` +
-      `fontsize=${scene.isHook ? 58 : 52}:fontcolor=white:fontweight=${scene.isHook ? 'bold' : 'normal'}:` +
-      `x=${textX}:y=${cardY + 50}:line_spacing=12:` +
+      `fontsize=${scene.isHook ? 56 : 50}:fontcolor=white:` +
+      `x=${textX}:y=${cardY + 60}:` +
       `enable='between(t,${t0},${t1})'`
     )
   })
@@ -186,12 +187,12 @@ async function buildVideoFFmpeg(short, audioPath, outputPath) {
   // CTA bar at bottom (last 6 seconds)
   const ctaStart = (totalDuration - 6).toFixed(2)
   filters.push(
-    `drawbox=x=0:y=${H - 180}:w=${W}:h=180:color=0xFF3B3B:t=fill:` +
+    `drawbox=x=0:y=${H - 180}:w=${W}:h=180:color=FF3B3B:t=fill:` +
     `enable='between(t,${ctaStart},${totalDuration})'`
   )
   filters.push(
     `drawtext=text='${escapeFFmpegText(short.cta || 'Follow for more!')}':` +
-    `fontsize=52:fontcolor=white:fontweight=bold:` +
+    `fontsize=50:fontcolor=white:` +
     `x=(w-text_w)/2:y=${H - 110}:` +
     `enable='between(t,${ctaStart},${totalDuration})'`
   )
