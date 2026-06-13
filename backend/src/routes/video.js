@@ -48,24 +48,30 @@ async function uploadToSupabase(supabase, buffer, filename, contentType) {
 }
 
 function buildScenes(short) {
-  // Break script into timed scenes for sync with voiceover
   const rawScript = short.script || short.hook || short.title || ''
-  // Split by line breaks or sentence endings
+
   const lines = rawScript
     .split(/\n+/)
-    .map(l => l.replace(/\[.*?\]/g, '').trim()) // remove [HOOK] [CTA] markers
-    .filter(l => l.length > 10)
-    .slice(0, 8) // max 8 scenes
+    .map(l => l.replace(/\[.*?\]/g, '').trim())  // remove [HOOK] [CTA] markers
+    .filter(l => l.length > 15)
+    .map(l => l.length > 100 ? l.slice(0, 97) + '...' : l) // truncate long lines
+    .slice(0, 5) // max 5 scenes for readability
 
-  if (lines.length === 0) lines.push(short.title || 'Watch this!')
+  if (lines.length === 0) lines.push(short.hook || short.title || 'Watch this!')
 
-  const totalDuration = 58
-  const sceneDuration = totalDuration / lines.length
+  // Prepend hook as first scene if not already there
+  const allScenes = []
+  if (short.hook && short.hook.length > 10) allScenes.push(short.hook.slice(0, 100))
+  allScenes.push(...lines)
+  const finalScenes = [...new Set(allScenes)].slice(0, 5)
 
-  return lines.map((line, i) => ({
+  const totalDuration = 55
+  const sceneDuration = totalDuration / finalScenes.length
+
+  return finalScenes.map((text, i) => ({
     time: i * sceneDuration,
     duration: sceneDuration,
-    text: line
+    text
   }))
 }
 
