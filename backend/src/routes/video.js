@@ -114,6 +114,7 @@ async function assembleVideoCreatomate(short, audioUrl) {
         output_format: 'mp4',
         width: 1080,
         height: 1920,
+        frame_rate: 30,
         duration,
         fill_color: '#0D0D1A',
         elements: [
