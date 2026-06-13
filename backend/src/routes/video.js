@@ -84,7 +84,8 @@ function buildScenes(short) {
   if (finalScenes.length === 0) finalScenes.push(short.title || 'Watch this!')
 
   const totalDuration = 55
-  const sceneDuration = totalDuration / finalScenes.length
+  const minSceneDuration = 8 // minimum 8 seconds per scene so text is readable
+  const sceneDuration = Math.max(totalDuration / finalScenes.length, minSceneDuration)
 
   return finalScenes.map((text, i) => ({
     time: i * sceneDuration,
@@ -98,7 +99,7 @@ async function assembleVideoCreatomate(short, audioUrl) {
   if (!apiKey) throw new Error('CREATOMATE_API_KEY not set')
 
   const scenes = buildScenes(short)
-  const duration = 60 // seconds
+  const duration = Math.max(scenes[scenes.length-1].time + scenes[scenes.length-1].duration + 6, 30)
 
   const res = await fetch('https://api.creatomate.com/v1/renders', {
     method: 'POST',
@@ -114,73 +115,146 @@ async function assembleVideoCreatomate(short, audioUrl) {
         width: 1080,
         height: 1920,
         duration,
+        fill_color: '#0D0D1A',
         elements: [
-          // Background — full duration
+          // Gradient background — top
           {
             type: 'shape',
             shape: 'rect',
             width: '100%',
-            height: '100%',
-            fill_color: '#0A0A0F',
+            height: '55%',
+            fill_color: [
+              { position: '0%', value: '#1A0A2E' },
+              { position: '100%', value: '#0D0D1A' }
+            ],
             x: '50%',
-            y: '50%',
+            y: '0%',
             x_alignment: '50%',
-            y_alignment: '50%',
+            y_alignment: '0%',
+            gradient_direction: '180°',
           },
-          // Title — shown first 4 seconds
+          // Red accent bar at top
           {
-            type: 'text',
-            text: short.title || short.topic || '',
-            font_family: 'Montserrat',
-            font_weight: '800',
-            font_size: '7 vmin',
+            type: 'shape',
+            shape: 'rect',
+            width: '15%',
+            height: '0.6%',
             fill_color: '#FF3B3B',
-            width: '85%',
             x: '50%',
-            y: '12%',
+            y: '6%',
             x_alignment: '50%',
             y_alignment: '50%',
             time: 0,
-            duration: duration,
+            duration,
           },
-          // Timed script scenes — each line appears at the right time
-          ...scenes.map((scene, i) => ({
+          // Title — always visible at top
+          {
             type: 'text',
-            text: scene.text,
+            text: (short.title || short.topic || '').toUpperCase(),
             font_family: 'Montserrat',
-            font_weight: i === 0 ? '700' : '500',
-            font_size: i === 0 ? '8 vmin' : '6.5 vmin',
-            fill_color: i === 0 ? '#FFFFFF' : '#E0E0E0',
+            font_weight: '900',
+            font_size: '6.5 vmin',
+            fill_color: '#FFFFFF',
             width: '85%',
             x: '50%',
-            y: '50%',
+            y: '10%',
             x_alignment: '50%',
             y_alignment: '50%',
-            time: scene.time,
-            duration: scene.duration,
-            animations: [
-              { time: 'start', duration: 0.4, easing: 'quadratic-out', type: 'slide', direction: '270°' },
-              { time: 'end', duration: 0.3, easing: 'quadratic-in', type: 'fade' }
-            ]
-          })),
-          // CTA — last 5 seconds
+            time: 0,
+            duration,
+            animations: [{ time: 'start', duration: 0.6, type: 'fade' }]
+          },
+          // Scene card background + text for each scene
+          ...scenes.flatMap((scene, i) => [
+            // Card background behind text
+            {
+              type: 'shape',
+              shape: 'rect',
+              width: '88%',
+              height: '22%',
+              fill_color: i === 0 ? 'rgba(255,59,59,0.15)' : 'rgba(255,255,255,0.07)',
+              border_radius: '20px',
+              x: '50%',
+              y: '48%',
+              x_alignment: '50%',
+              y_alignment: '50%',
+              time: scene.time,
+              duration: scene.duration - 0.3,
+              animations: [
+                { time: 'start', duration: 0.4, easing: 'quadratic-out', type: 'scale', start_scale: '80%' },
+                { time: 'end', duration: 0.3, type: 'fade' }
+              ]
+            },
+            // Step number (for key points, not hook/cta)
+            ...(i > 0 && i < scenes.length - 1 ? [{
+              type: 'text',
+              text: `${i}`,
+              font_family: 'Montserrat',
+              font_weight: '900',
+              font_size: '9 vmin',
+              fill_color: '#FF3B3B',
+              x: '12%',
+              y: '37%',
+              x_alignment: '50%',
+              y_alignment: '50%',
+              time: scene.time,
+              duration: scene.duration - 0.3,
+              animations: [
+                { time: 'start', duration: 0.4, type: 'fade' },
+                { time: 'end', duration: 0.3, type: 'fade' }
+              ]
+            }] : []),
+            // Scene text
+            {
+              type: 'text',
+              text: scene.text,
+              font_family: 'Montserrat',
+              font_weight: i === 0 ? '700' : '600',
+              font_size: i === 0 ? '7.5 vmin' : '6 vmin',
+              fill_color: '#FFFFFF',
+              width: i > 0 && i < scenes.length - 1 ? '68%' : '80%',
+              x: i > 0 && i < scenes.length - 1 ? '57%' : '50%',
+              y: '48%',
+              x_alignment: '50%',
+              y_alignment: '50%',
+              time: scene.time,
+              duration: scene.duration - 0.3,
+              animations: [
+                { time: 'start', duration: 0.4, easing: 'quadratic-out', type: 'slide', direction: '270°' },
+                { time: 'end', duration: 0.3, type: 'fade' }
+              ]
+            },
+          ]),
+          // Bottom CTA bar
+          {
+            type: 'shape',
+            shape: 'rect',
+            width: '100%',
+            height: '12%',
+            fill_color: '#FF3B3B',
+            x: '50%',
+            y: '100%',
+            x_alignment: '50%',
+            y_alignment: '100%',
+            time: duration - 6,
+            duration: 6,
+            animations: [{ time: 'start', duration: 0.5, type: 'slide', direction: '90°' }]
+          },
           {
             type: 'text',
             text: short.cta || 'Follow for more! 🔥',
             font_family: 'Montserrat',
             font_weight: '800',
-            font_size: '7 vmin',
-            fill_color: '#FF3B3B',
+            font_size: '6 vmin',
+            fill_color: '#FFFFFF',
             width: '85%',
             x: '50%',
-            y: '85%',
+            y: '94%',
             x_alignment: '50%',
             y_alignment: '50%',
-            time: duration - 5,
-            duration: 5,
-            animations: [
-              { time: 'start', duration: 0.5, type: 'fade' }
-            ]
+            time: duration - 6,
+            duration: 6,
+            animations: [{ time: 'start', duration: 0.5, type: 'fade' }]
           },
           // Audio track
           ...(audioUrl ? [{
