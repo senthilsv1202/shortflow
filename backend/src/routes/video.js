@@ -48,22 +48,40 @@ async function uploadToSupabase(supabase, buffer, filename, contentType) {
 }
 
 function buildScenes(short) {
-  const rawScript = short.script || short.hook || short.title || ''
+  const scenes = []
 
-  const lines = rawScript
-    .split(/\n+/)
-    .map(l => l.replace(/\[.*?\]/g, '').trim())  // remove [HOOK] [CTA] markers
-    .filter(l => l.length > 15)
-    .map(l => l.length > 100 ? l.slice(0, 97) + '...' : l) // truncate long lines
-    .slice(0, 5) // max 5 scenes for readability
+  // Scene 1: Hook
+  if (short.hook) scenes.push(short.hook.slice(0, 100))
 
-  if (lines.length === 0) lines.push(short.hook || short.title || 'Watch this!')
+  // Scenes 2-4: Key points (cleanest content from Claude)
+  if (short.key_points && short.key_points.length > 0) {
+    short.key_points
+      .filter(p => p && p.trim().length > 5)
+      .slice(0, 3)
+      .forEach(p => scenes.push(p.slice(0, 100)))
+  } else {
+    // Fallback: parse script lines, skip markers and numbered items
+    const rawScript = short.script || ''
+    const lines = rawScript
+      .split(/\n+/)
+      .map(l => l
+        .replace(/\[.*?\]/g, '')   // remove [HOOK] etc
+        .replace(/^\d+\.\s*/, '')  // remove "1. "
+        .replace(/^[-•*]\s*/, '')  // remove bullet points
+        .trim()
+      )
+      .filter(l => l.length > 20 && l.length < 120)
+      .slice(0, 3)
+    scenes.push(...lines)
+  }
 
-  // Prepend hook as first scene if not already there
-  const allScenes = []
-  if (short.hook && short.hook.length > 10) allScenes.push(short.hook.slice(0, 100))
-  allScenes.push(...lines)
-  const finalScenes = [...new Set(allScenes)].slice(0, 5)
+  // Scene 5: CTA
+  if (short.cta) scenes.push(short.cta.slice(0, 100))
+  else scenes.push('Follow for more! 🔥')
+
+  // Deduplicate and limit
+  const finalScenes = [...new Set(scenes)].filter(Boolean).slice(0, 5)
+  if (finalScenes.length === 0) finalScenes.push(short.title || 'Watch this!')
 
   const totalDuration = 55
   const sceneDuration = totalDuration / finalScenes.length
