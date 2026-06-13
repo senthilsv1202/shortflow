@@ -18,7 +18,7 @@ import { execSync } from 'child_process'
 import path from 'path'
 import os from 'os'
 
-// Use system FFmpeg (from nixpacks) if available, else fallback to installer
+// Use system FFmpeg if available, else bundled
 function detectFfmpegPath() {
   try {
     const p = execSync('which ffmpeg').toString().trim()
@@ -28,32 +28,41 @@ function detectFfmpegPath() {
   return ffmpegInstaller.path
 }
 
-function detectFontPath() {
-  // Try the file written during nixpacks build
+ffmpeg.setFfmpegPath(detectFfmpegPath())
+
+// Download font at startup to /tmp so drawtext can use it
+let FONT_PATH = null
+async function ensureFont() {
+  if (FONT_PATH) return FONT_PATH
+  const fontFile = '/tmp/shortflow-font.ttf'
+  // Check if already downloaded
+  try { await fs.access(fontFile); FONT_PATH = fontFile; return fontFile } catch {}
+  // Download Roboto from Google Fonts CDN
+  console.log('[video] Downloading font...')
   try {
-    const p = execSync('cat /app/assets/font_path.txt').toString().trim()
-    if (p && p.length > 4) return p
-  } catch {}
-  // Try find in nix store
+    const res = await fetch('https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf')
+    if (res.ok) {
+      await fs.writeFile(fontFile, Buffer.from(await res.arrayBuffer()))
+      FONT_PATH = fontFile
+      console.log('[video] Font downloaded to', fontFile)
+      return fontFile
+    }
+  } catch(e) { console.warn('[video] Font download failed:', e.message) }
+  // Fallback URL
   try {
-    const p = execSync("find /nix/store -name 'DejaVuSans.ttf' 2>/dev/null | head -1").toString().trim()
-    if (p) return p
+    const res = await fetch('https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff2')
+    if (res.ok) {
+      await fs.writeFile(fontFile, Buffer.from(await res.arrayBuffer()))
+      FONT_PATH = fontFile
+      return fontFile
+    }
   } catch {}
-  // Common Linux paths
-  const candidates = [
-    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-    '/usr/share/fonts/dejavu/DejaVuSans.ttf',
-    '/usr/share/fonts/TTF/DejaVuSans.ttf',
-  ]
-  for (const p of candidates) {
-    try { execSync(`test -f "${p}"`); return p } catch {}
-  }
+  console.warn('[video] No font available — text may not render')
   return null
 }
 
-ffmpeg.setFfmpegPath(detectFfmpegPath())
-const FONT_PATH = detectFontPath()
-console.log('[video] Font path:', FONT_PATH || 'NOT FOUND')
+// Pre-download font on startup
+ensureFont().catch(() => {})
 
 const router = Router()
 
@@ -157,6 +166,7 @@ function wrapText(text, maxChars = 28) {
 }
 
 async function buildVideoFFmpeg(short, audioPath, outputPath) {
+  const fontPath = await ensureFont()
   const scenes = buildScenes(short)
   const totalDuration = scenes[scenes.length - 1].time + scenes[scenes.length - 1].duration + 1
   const W = 1080
@@ -169,7 +179,7 @@ async function buildVideoFFmpeg(short, audioPath, outputPath) {
   // Dark gradient background (using solid color, FFmpeg doesn't do gradients natively)
   // We use lavfi color source
 
-  const ff = FONT_PATH ? `fontfile='${FONT_PATH}':` : ''
+  const ff = fontPath ? `fontfile='${fontPath}':` : ''
 
   // Title — always visible
   filters.push(
