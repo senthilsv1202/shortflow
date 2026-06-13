@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["ffmpeg", "fontconfig", "freetype"]
+nixPkgs = ["ffmpeg", "fontconfig", "freetype", "dejavu_fonts"]
 
 [phases.install]
 cmds = ["npm install"]

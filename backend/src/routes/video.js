@@ -14,10 +14,39 @@ import { requireAuth } from '../middleware/auth.js'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import { promises as fs } from 'fs'
+import { execSync } from 'child_process'
 import path from 'path'
 import os from 'os'
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path)
+
+// Detect a usable font path at startup
+function detectFontPath() {
+  const candidates = [
+    '/nix/var/nix/profiles/default/share/fonts/truetype/DejaVu/DejaVuSans.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/usr/share/fonts/dejavu/DejaVuSans.ttf',
+    '/usr/share/fonts/TTF/DejaVuSans.ttf',
+    '/usr/share/fonts/truetype/DejaVuSans.ttf',
+  ]
+  for (const p of candidates) {
+    try { execSync(`test -f "${p}"`); return p } catch {}
+  }
+  // Try fc-list
+  try {
+    const result = execSync('fc-list : file | grep -i "dejavu" | head -1').toString().trim().split(':')[0].trim()
+    if (result) return result
+  } catch {}
+  // Last resort — any ttf
+  try {
+    const result = execSync('find /nix /usr/share/fonts -name "*.ttf" 2>/dev/null | head -1').toString().trim()
+    if (result) return result
+  } catch {}
+  return null
+}
+
+const FONT_PATH = detectFontPath()
+console.log('[video] Font path:', FONT_PATH || 'NOT FOUND')
 
 const router = Router()
 
@@ -133,9 +162,11 @@ async function buildVideoFFmpeg(short, audioPath, outputPath) {
   // Dark gradient background (using solid color, FFmpeg doesn't do gradients natively)
   // We use lavfi color source
 
+  const ff = FONT_PATH ? `fontfile='${FONT_PATH}':` : ''
+
   // Title — always visible
   filters.push(
-    `drawtext=text='${title}':` +
+    `drawtext=${ff}text='${title}':` +
     `fontsize=50:fontcolor=white:` +
     `x=(w-text_w)/2:y=120:` +
     `enable='between(t,0,${totalDuration})'`
@@ -167,7 +198,7 @@ async function buildVideoFFmpeg(short, audioPath, outputPath) {
     // Step number (middle scenes only)
     if (scene.stepNum !== null) {
       filters.push(
-        `drawtext=text='${scene.stepNum}':` +
+        `drawtext=${ff}text='${scene.stepNum}':` +
         `fontsize=110:fontcolor=FF3B3B:` +
         `x=90:y=${cardY + 90}:` +
         `enable='between(t,${t0},${t1})'`
@@ -177,7 +208,7 @@ async function buildVideoFFmpeg(short, audioPath, outputPath) {
     // Scene text
     const textX = scene.stepNum !== null ? `210` : `(w-text_w)/2`
     filters.push(
-      `drawtext=text='${escapedText}':` +
+      `drawtext=${ff}text='${escapedText}':` +
       `fontsize=${scene.isHook ? 56 : 50}:fontcolor=white:` +
       `x=${textX}:y=${cardY + 60}:` +
       `enable='between(t,${t0},${t1})'`
@@ -191,7 +222,7 @@ async function buildVideoFFmpeg(short, audioPath, outputPath) {
     `enable='between(t,${ctaStart},${totalDuration})'`
   )
   filters.push(
-    `drawtext=text='${escapeFFmpegText(short.cta || 'Follow for more!')}':` +
+    `drawtext=${ff}text='${escapeFFmpegText(short.cta || 'Follow for more!')}':` +
     `fontsize=50:fontcolor=white:` +
     `x=(w-text_w)/2:y=${H - 110}:` +
     `enable='between(t,${ctaStart},${totalDuration})'`
