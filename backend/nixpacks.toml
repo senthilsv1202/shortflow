@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["ffmpeg", "cairo", "pango", "libpng", "libjpeg", "giflib", "librsvg", "pkg-config"]
+nixPkgs = ["ffmpeg"]
 
 [phases.install]
 cmds = ["npm install"]
