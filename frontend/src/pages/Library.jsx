@@ -21,7 +21,18 @@ export default function Library() {
   const [selected, setSelected] = useState(null)
   const [publishing, setPublishing] = useState(false)
   const [generatingVideo, setGeneratingVideo] = useState(false)
+  const [selectedVoice, setSelectedVoice] = useState('male')
   const [publishForm, setPublishForm] = useState({ channel_id:'', privacy:'public' })
+
+  // Popular ElevenLabs voices
+  const VOICES = [
+    { id: 'TxGEqnHWrfWFTfGW9XjX', label: 'Josh', gender: 'male', description: 'Deep & authoritative' },
+    { id: 'VR6AewLTigWG4xSOukaG', label: 'Arnold', gender: 'male', description: 'Strong & confident' },
+    { id: 'pNInz6obpgDQGcFmaJgB', label: 'Adam', gender: 'male', description: 'Calm & professional' },
+    { id: '21m00Tcm4TlvDq8ikWAM', label: 'Rachel', gender: 'female', description: 'Warm & friendly' },
+    { id: 'AZnzlk1XvdvUeBnXmlld', label: 'Domi', gender: 'female', description: 'Energetic & young' },
+    { id: 'EXAVITQu4vr4xnSDxMaL', label: 'Bella', gender: 'female', description: 'Soft & expressive' },
+  ]
   const [toast, setToast] = useState('')
 
   useEffect(() => {
@@ -58,7 +69,7 @@ export default function Library() {
     setGeneratingVideo(true)
     showToast('🎬 Video generation started — this takes 1-2 minutes...')
     try {
-      await api.generateVideo(selected.id)
+      await api.generateVideo(selected.id, { voice_id: selectedVoice })
       // Poll every 5s until status changes
       const poll = setInterval(async () => {
         try {
@@ -212,8 +223,36 @@ export default function Library() {
             {/* Generate Video — for drafts without a video */}
             {(selected.status === 'draft' || selected.status === 'failed') && !selected.video_url && (
               <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginTop:4,marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>🎬 Generate Video</div>
-                <div style={{fontSize:12,color:'var(--text3)',marginBottom:12}}>Creates a voiceover + video using ElevenLabs & Creatomate. Takes ~1-2 minutes.</div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>🎬 Generate Video</div>
+
+                {/* Voice picker */}
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:12,fontWeight:600,color:'var(--text3)',marginBottom:8,textTransform:'uppercase',letterSpacing:.5}}>Choose Voice</div>
+                  {/* Gender tabs */}
+                  <div style={{display:'flex',gap:6,marginBottom:10}}>
+                    {['male','female'].map(g => (
+                      <button key={g} onClick={()=>{
+                        const first = VOICES.find(v=>v.gender===g)
+                        if(first) setSelectedVoice(first.id)
+                      }}
+                      style={{padding:'4px 14px',borderRadius:20,border:'1.5px solid var(--border)',background: VOICES.find(v=>v.id===selectedVoice)?.gender===g ? 'var(--accent)':'transparent',color: VOICES.find(v=>v.id===selectedVoice)?.gender===g ?'#fff':'var(--text3)',fontSize:12,fontWeight:600,cursor:'pointer',textTransform:'capitalize'}}>
+                        {g === 'male' ? '👨 Male' : '👩 Female'}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Voice options */}
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                    {VOICES.filter(v => v.gender === (VOICES.find(v=>v.id===selectedVoice)?.gender || 'male')).map(v => (
+                      <div key={v.id} onClick={()=>setSelectedVoice(v.id)}
+                        style={{padding:'8px 12px',borderRadius:8,border:`1.5px solid ${selectedVoice===v.id?'var(--accent)':'var(--border)'}`,background:selectedVoice===v.id?'rgba(255,59,59,.1)':'transparent',cursor:'pointer'}}>
+                        <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{v.label}</div>
+                        <div style={{fontSize:11,color:'var(--text3)'}}>{v.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{fontSize:12,color:'var(--text3)',marginBottom:10}}>Takes ~1-2 minutes to generate.</div>
                 <button className="btn btn-accent" style={{width:'100%'}} disabled={generatingVideo} onClick={handleGenerateVideo}>
                   {generatingVideo ? '⏳ Generating… (check back in 1-2 min)' : '🎬 Generate Video'}
                 </button>
