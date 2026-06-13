@@ -40,21 +40,29 @@ async function ensureFont() {
   // Download Roboto from Google Fonts CDN
   console.log('[video] Downloading font...')
   try {
-    const res = await fetch('https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf')
+    // Use Open Sans from a direct CDN link (confirmed TTF)
+    const res = await fetch('https://fonts.gstatic.com/s/opensans/v40/memSYaGs126MiZpBA-UvWbX2vVnXBbObj2OVZyOOSr4dVJWUgsiH0B4gaVc.ttf')
     if (res.ok) {
-      await fs.writeFile(fontFile, Buffer.from(await res.arrayBuffer()))
-      FONT_PATH = fontFile
-      console.log('[video] Font downloaded to', fontFile)
-      return fontFile
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length > 10000) { // sanity check — real TTF is >10KB
+        await fs.writeFile(fontFile, buf)
+        FONT_PATH = fontFile
+        console.log('[video] Font downloaded to', fontFile, `(${buf.length} bytes)`)
+        return fontFile
+      }
     }
   } catch(e) { console.warn('[video] Font download failed:', e.message) }
-  // Fallback URL
+  // Fallback: Ubuntu font
   try {
-    const res = await fetch('https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff2')
+    const res = await fetch('https://fonts.gstatic.com/s/ubuntu/v20/4iCs6KVjbNBYlgoKfw72.ttf')
     if (res.ok) {
-      await fs.writeFile(fontFile, Buffer.from(await res.arrayBuffer()))
-      FONT_PATH = fontFile
-      return fontFile
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length > 10000) {
+        await fs.writeFile(fontFile, buf)
+        FONT_PATH = fontFile
+        console.log('[video] Fallback font downloaded')
+        return fontFile
+      }
     }
   } catch {}
   console.warn('[video] No font available — text may not render')
@@ -205,10 +213,10 @@ async function buildVideoFFmpeg(short, audioPath, outputPath) {
     const cardY = Math.round(H * 0.38)
     const cardH = 320
 
-    // Card background box
+    // Card background box (solid dark color — no alpha, not supported in all builds)
     filters.push(
       `drawbox=x=60:y=${cardY}:w=${W - 120}:h=${cardH}:` +
-      `color=${scene.isHook ? 'FF3B3B' : 'FFFFFF'}@0.1:t=fill:` +
+      `color=${scene.isHook ? '3D0A0A' : '1A1A2E'}:t=fill:` +
       `enable='between(t,${t0},${t1})'`
     )
 
