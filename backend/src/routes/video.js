@@ -18,33 +18,40 @@ import { execSync } from 'child_process'
 import path from 'path'
 import os from 'os'
 
-ffmpeg.setFfmpegPath(ffmpegInstaller.path)
+// Use system FFmpeg (from nixpacks) if available, else fallback to installer
+function detectFfmpegPath() {
+  try {
+    const p = execSync('which ffmpeg').toString().trim()
+    if (p) { console.log('[video] Using system FFmpeg:', p); return p }
+  } catch {}
+  console.log('[video] Using bundled FFmpeg:', ffmpegInstaller.path)
+  return ffmpegInstaller.path
+}
 
-// Detect a usable font path at startup
 function detectFontPath() {
+  // Try the file written during nixpacks build
+  try {
+    const p = execSync('cat /app/assets/font_path.txt').toString().trim()
+    if (p && p.length > 4) return p
+  } catch {}
+  // Try find in nix store
+  try {
+    const p = execSync("find /nix/store -name 'DejaVuSans.ttf' 2>/dev/null | head -1").toString().trim()
+    if (p) return p
+  } catch {}
+  // Common Linux paths
   const candidates = [
-    '/nix/var/nix/profiles/default/share/fonts/truetype/DejaVu/DejaVuSans.ttf',
     '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
     '/usr/share/fonts/dejavu/DejaVuSans.ttf',
     '/usr/share/fonts/TTF/DejaVuSans.ttf',
-    '/usr/share/fonts/truetype/DejaVuSans.ttf',
   ]
   for (const p of candidates) {
     try { execSync(`test -f "${p}"`); return p } catch {}
   }
-  // Try fc-list
-  try {
-    const result = execSync('fc-list : file | grep -i "dejavu" | head -1').toString().trim().split(':')[0].trim()
-    if (result) return result
-  } catch {}
-  // Last resort — any ttf
-  try {
-    const result = execSync('find /nix /usr/share/fonts -name "*.ttf" 2>/dev/null | head -1').toString().trim()
-    if (result) return result
-  } catch {}
   return null
 }
 
+ffmpeg.setFfmpegPath(detectFfmpegPath())
 const FONT_PATH = detectFontPath()
 console.log('[video] Font path:', FONT_PATH || 'NOT FOUND')
 
