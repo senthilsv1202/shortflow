@@ -1,85 +1,31 @@
 /**
- * Video Generation Pipeline — FFmpeg based
+ * Video Generation Pipeline — Canvas + FFmpeg
  *
- * POST /api/video/generate/:shortId
- *   1. Generate voiceover via ElevenLabs
- *   2. Upload audio to Supabase Storage
- *   3. Assemble 1080x1920 MP4 via FFmpeg (text scenes + audio)
- *   4. Upload video to Supabase Storage
- *   5. Save video_url + voiceover_url, status → 'ready'
+ * For each scene, generates a PNG frame using canvas (no system fonts needed),
+ * then uses FFmpeg to combine frames + audio into a 1080x1920 MP4.
  */
 
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
+import { createCanvas, registerFont } from 'canvas'
 import { promises as fs } from 'fs'
 import { execSync } from 'child_process'
 import path from 'path'
 import os from 'os'
 
-// Use system FFmpeg if available, else bundled
-function detectFfmpegPath() {
-  try {
-    const p = execSync('which ffmpeg').toString().trim()
-    if (p) { console.log('[video] Using system FFmpeg:', p); return p }
-  } catch {}
-  console.log('[video] Using bundled FFmpeg:', ffmpegInstaller.path)
-  return ffmpegInstaller.path
-}
-
-ffmpeg.setFfmpegPath(detectFfmpegPath())
-
-// Download font at startup to /tmp so drawtext can use it
-let FONT_PATH = null
-async function ensureFont() {
-  if (FONT_PATH) return FONT_PATH
-  const fontFile = '/tmp/shortflow-font.ttf'
-  // Check if already downloaded
-  try { await fs.access(fontFile); FONT_PATH = fontFile; return fontFile } catch {}
-  // Download Roboto from Google Fonts CDN
-  console.log('[video] Downloading font...')
-  try {
-    // Use Open Sans from a direct CDN link (confirmed TTF)
-    const res = await fetch('https://fonts.gstatic.com/s/opensans/v40/memSYaGs126MiZpBA-UvWbX2vVnXBbObj2OVZyOOSr4dVJWUgsiH0B4gaVc.ttf')
-    if (res.ok) {
-      const buf = Buffer.from(await res.arrayBuffer())
-      if (buf.length > 10000) { // sanity check — real TTF is >10KB
-        await fs.writeFile(fontFile, buf)
-        FONT_PATH = fontFile
-        console.log('[video] Font downloaded to', fontFile, `(${buf.length} bytes)`)
-        return fontFile
-      }
-    }
-  } catch(e) { console.warn('[video] Font download failed:', e.message) }
-  // Fallback: Ubuntu font
-  try {
-    const res = await fetch('https://fonts.gstatic.com/s/ubuntu/v20/4iCs6KVjbNBYlgoKfw72.ttf')
-    if (res.ok) {
-      const buf = Buffer.from(await res.arrayBuffer())
-      if (buf.length > 10000) {
-        await fs.writeFile(fontFile, buf)
-        FONT_PATH = fontFile
-        console.log('[video] Fallback font downloaded')
-        return fontFile
-      }
-    }
-  } catch {}
-  console.warn('[video] No font available — text may not render')
-  return null
-}
-
-// Pre-download font on startup
-ensureFont().catch(() => {})
+ffmpeg.setFfmpegPath(ffmpegInstaller.path)
 
 const router = Router()
+const W = 1080
+const H = 1920
 
 // ── ElevenLabs voiceover ───────────────────────────────────────────────────
 
 async function generateVoiceover(script, voiceId = 'TxGEqnHWrfWFTfGW9XjX') {
   const apiKey = process.env.ELEVENLABS_API_KEY
   if (!apiKey) throw new Error('ELEVENLABS_API_KEY not set')
-
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
     method: 'POST',
     headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
@@ -96,7 +42,7 @@ async function generateVoiceover(script, voiceId = 'TxGEqnHWrfWFTfGW9XjX') {
   return Buffer.from(await res.arrayBuffer())
 }
 
-// ── Supabase Storage upload ────────────────────────────────────────────────
+// ── Supabase Storage ───────────────────────────────────────────────────────
 
 async function uploadToSupabase(supabase, buffer, filename, contentType) {
   const { error } = await supabase.storage
@@ -113,7 +59,6 @@ async function uploadToSupabase(supabase, buffer, filename, contentType) {
 
 function buildScenes(short) {
   const rawScript = short.script || short.hook || short.title || ''
-
   const lines = rawScript
     .split(/\n+/)
     .map(l => l.replace(/\[.*?\]/g, '').trim())
@@ -130,8 +75,7 @@ function buildScenes(short) {
   else allScenes.push('Follow for more! 🔥')
 
   const finalScenes = [...new Set(allScenes)].filter(Boolean).slice(0, 5)
-  const minDuration = 8
-  const sceneDuration = Math.max(55 / finalScenes.length, minDuration)
+  const sceneDuration = Math.max(55 / finalScenes.length, 8)
 
   return finalScenes.map((text, i) => ({
     time: i * sceneDuration,
@@ -143,144 +87,164 @@ function buildScenes(short) {
   }))
 }
 
-// ── FFmpeg video builder ───────────────────────────────────────────────────
+// ── Canvas frame generator ─────────────────────────────────────────────────
 
-function escapeFFmpegText(text) {
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/:/g, '\\:')
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .replace(/,/g, '\\,')
-    .replace(/;/g, '\\;')
-    .replace(/\n/g, ' ')
-}
-
-function wrapText(text, maxChars = 28) {
+function wrapText(ctx, text, maxWidth) {
   const words = text.split(' ')
   const lines = []
-  let current = ''
+  let line = ''
   for (const word of words) {
-    if ((current + ' ' + word).trim().length > maxChars) {
-      if (current) lines.push(current.trim())
-      current = word
+    const test = line ? `${line} ${word}` : word
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line)
+      line = word
     } else {
-      current = (current + ' ' + word).trim()
+      line = test
     }
   }
-  if (current) lines.push(current.trim())
-  return lines.join('\n')
+  if (line) lines.push(line)
+  return lines
 }
 
-async function buildVideoFFmpeg(short, audioPath, outputPath) {
-  const fontPath = await ensureFont()
-  const scenes = buildScenes(short)
-  const totalDuration = scenes[scenes.length - 1].time + scenes[scenes.length - 1].duration + 1
-  const W = 1080
-  const H = 1920
-  const title = escapeFFmpegText((short.title || short.topic || '').toUpperCase())
+function drawScene(scene, title, index) {
+  const canvas = createCanvas(W, H)
+  const ctx = canvas.getContext('2d')
 
-  // Build drawtext filters for all scenes
-  const filters = []
+  // Background gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, H)
+  grad.addColorStop(0, '#1A0A2E')
+  grad.addColorStop(0.5, '#0D0D1A')
+  grad.addColorStop(1, '#0A0A0F')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, W, H)
 
-  // Dark gradient background (using solid color, FFmpeg doesn't do gradients natively)
-  // We use lavfi color source
+  // Red accent bar at top
+  ctx.fillStyle = '#FF3B3B'
+  ctx.fillRect(W / 2 - 100, 90, 200, 8)
 
-  const ff = fontPath ? `fontfile='${fontPath}':` : ''
-
-  // Title — always visible
-  filters.push(
-    `drawtext=${ff}text='${title}':` +
-    `fontsize=50:fontcolor=white:` +
-    `x=(w-text_w)/2:y=120:` +
-    `enable='between(t,0,${totalDuration})'`
-  )
-
-  // Red accent line under title
-  filters.push(
-    `drawbox=x=(w-200)/2:y=200:w=200:h=6:color=FF3B3B:t=fill:` +
-    `enable='between(t,0,${totalDuration})'`
-  )
-
-  // Each scene
-  scenes.forEach((scene, i) => {
-    const t0 = scene.time.toFixed(2)
-    const t1 = (scene.time + scene.duration - 0.3).toFixed(2)
-    const wrapped = wrapText(scene.text, 24)
-    const escapedText = escapeFFmpegText(wrapped)
-
-    const cardY = Math.round(H * 0.38)
-    const cardH = 320
-
-    // Card background box (solid dark color — no alpha, not supported in all builds)
-    filters.push(
-      `drawbox=x=60:y=${cardY}:w=${W - 120}:h=${cardH}:` +
-      `color=${scene.isHook ? '3D0A0A' : '1A1A2E'}:t=fill:` +
-      `enable='between(t,${t0},${t1})'`
-    )
-
-    // Step number (middle scenes only)
-    if (scene.stepNum !== null) {
-      filters.push(
-        `drawtext=${ff}text='${scene.stepNum}':` +
-        `fontsize=110:fontcolor=FF3B3B:` +
-        `x=90:y=${cardY + 90}:` +
-        `enable='between(t,${t0},${t1})'`
-      )
-    }
-
-    // Scene text
-    const textX = scene.stepNum !== null ? `210` : `(w-text_w)/2`
-    filters.push(
-      `drawtext=${ff}text='${escapedText}':` +
-      `fontsize=${scene.isHook ? 56 : 50}:fontcolor=white:` +
-      `x=${textX}:y=${cardY + 60}:` +
-      `enable='between(t,${t0},${t1})'`
-    )
+  // Title at top
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = 'bold 52px sans-serif'
+  ctx.textAlign = 'center'
+  const titleLines = wrapText(ctx, title.toUpperCase(), W - 120)
+  titleLines.slice(0, 2).forEach((line, i) => {
+    ctx.fillText(line, W / 2, 160 + i * 65)
   })
 
-  // CTA bar at bottom (last 6 seconds)
-  const ctaStart = (totalDuration - 6).toFixed(2)
-  filters.push(
-    `drawbox=x=0:y=${H - 180}:w=${W}:h=180:color=FF3B3B:t=fill:` +
-    `enable='between(t,${ctaStart},${totalDuration})'`
-  )
-  filters.push(
-    `drawtext=${ff}text='${escapeFFmpegText(short.cta || 'Follow for more!')}':` +
-    `fontsize=50:fontcolor=white:` +
-    `x=(w-text_w)/2:y=${H - 110}:` +
-    `enable='between(t,${ctaStart},${totalDuration})'`
-  )
+  // Scene card
+  const cardY = Math.round(H * 0.36)
+  const cardH = 380
+  const cardPad = 60
 
-  const vf = filters.join(',')
+  // Card background
+  ctx.fillStyle = scene.isHook ? 'rgba(255,59,59,0.18)' : 'rgba(255,255,255,0.07)'
+  roundRect(ctx, cardPad, cardY, W - cardPad * 2, cardH, 24)
+  ctx.fill()
+
+  // Card border
+  ctx.strokeStyle = scene.isHook ? '#FF3B3B' : 'rgba(255,255,255,0.15)'
+  ctx.lineWidth = 2
+  roundRect(ctx, cardPad, cardY, W - cardPad * 2, cardH, 24)
+  ctx.stroke()
+
+  // Step number
+  if (scene.stepNum !== null) {
+    ctx.fillStyle = '#FF3B3B'
+    ctx.font = 'bold 120px sans-serif'
+    ctx.textAlign = 'left'
+    ctx.fillText(`${scene.stepNum}`, cardPad + 40, cardY + 140)
+  }
+
+  // Scene text
+  const textSize = scene.isHook ? 58 : 52
+  ctx.font = `${scene.isHook ? 'bold' : 'normal'} ${textSize}px sans-serif`
+  ctx.fillStyle = '#FFFFFF'
+  ctx.textAlign = scene.stepNum !== null ? 'left' : 'center'
+  const textX = scene.stepNum !== null ? cardPad + 200 : W / 2
+  const textMaxW = scene.stepNum !== null ? W - cardPad * 2 - 200 : W - cardPad * 2 - 40
+  const textLines = wrapText(ctx, scene.text, textMaxW)
+  const lineH = textSize + 14
+  const totalTextH = textLines.length * lineH
+  const textStartY = cardY + (cardH - totalTextH) / 2 + textSize / 2
+  textLines.forEach((line, i) => {
+    ctx.fillText(line, textX, textStartY + i * lineH)
+  })
+
+  // CTA bar at bottom
+  if (scene.isCta) {
+    ctx.fillStyle = '#FF3B3B'
+    ctx.fillRect(0, H - 180, W, 180)
+    ctx.fillStyle = '#FFFFFF'
+    ctx.font = 'bold 52px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(scene.text, W / 2, H - 95)
+  }
+
+  // Scene indicator dots at bottom
+  return canvas.toBuffer('image/png')
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  ctx.lineTo(x + r, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+  ctx.lineTo(x, y + r)
+  ctx.quadraticCurveTo(x, y, x + r, y)
+  ctx.closePath()
+}
+
+// ── FFmpeg video assembler ─────────────────────────────────────────────────
+
+async function buildVideo(scenes, title, audioPath, outputPath, tmpDir) {
+  const FPS = 30
+
+  // Generate PNG for each scene
+  const framePaths = []
+  for (let i = 0; i < scenes.length; i++) {
+    const png = drawScene(scenes[i], title, i)
+    const framePath = path.join(tmpDir, `scene_${i}.png`)
+    await fs.writeFile(framePath, png)
+    framePaths.push({ path: framePath, duration: scenes[i].duration })
+  }
+
+  // Write concat file for FFmpeg
+  const concatFile = path.join(tmpDir, 'concat.txt')
+  const concatContent = framePaths.map(f =>
+    `file '${f.path}'\nduration ${f.duration}`
+  ).join('\n') + `\nfile '${framePaths[framePaths.length-1].path}'`
+  await fs.writeFile(concatFile, concatContent)
 
   return new Promise((resolve, reject) => {
     const cmd = ffmpeg()
-      // Background: solid dark color
-      .input(`color=c=0x0D0D1A:size=${W}x${H}:rate=30:duration=${totalDuration}`)
-      .inputFormat('lavfi')
+      .input(concatFile)
+      .inputOptions(['-f concat', '-safe 0'])
 
-    // Add audio if available
-    if (audioPath) {
-      cmd.input(audioPath)
-    }
+    if (audioPath) cmd.input(audioPath)
 
     cmd
-      .videoFilter(vf)
       .outputOptions([
         '-c:v libx264',
         '-preset fast',
-        '-crf 18',          // high quality (0=lossless, 51=worst)
+        '-crf 18',
         '-pix_fmt yuv420p',
+        '-r 30',
         '-movflags +faststart',
         ...(audioPath ? ['-c:a aac', '-b:a 192k', '-shortest'] : []),
       ])
       .output(outputPath)
-      .on('start', cmd => console.log('[ffmpeg] started:', cmd.slice(0, 120)))
-      .on('progress', p => console.log(`[ffmpeg] progress: ${Math.round(p.percent || 0)}%`))
+      .on('start', c => console.log('[ffmpeg] started:', c.slice(0, 100)))
+      .on('progress', p => console.log(`[ffmpeg] ${Math.round(p.percent || 0)}%`))
       .on('end', () => { console.log('[ffmpeg] done'); resolve() })
-      .on('error', (err) => { console.error('[ffmpeg] error:', err.message); reject(err) })
+      .on('error', (err, stdout, stderr) => {
+        console.error('[ffmpeg] error:', err.message)
+        console.error('[ffmpeg] stderr:', stderr?.slice(-500))
+        reject(err)
+      })
       .run()
   })
 }
@@ -301,7 +265,6 @@ router.post('/generate/:shortId', requireAuth, async (req, res) => {
   if (error || !short) return res.status(404).json({ error: 'Short not found' })
 
   await req.supabase.from('shorts').update({ status: 'generating' }).eq('id', shortId)
-
   res.json({ message: 'Video generation started', short_id: shortId, status: 'generating' })
 
   ;(async () => {
@@ -321,50 +284,47 @@ router.post('/generate/:shortId', requireAuth, async (req, res) => {
           const audioBuffer = await generateVoiceover(scriptText, voice_id)
           await fs.writeFile(audioPath, audioBuffer)
           localAudioPath = audioPath
-
-          // Upload to Supabase
           voiceoverUrl = await uploadToSupabase(
             req.supabase, audioBuffer,
             `${req.user.id}/${shortId}/voiceover.mp3`, 'audio/mpeg'
           )
           await req.supabase.from('shorts').update({ voiceover_url: voiceoverUrl }).eq('id', shortId)
-          console.log(`[video] Voiceover ready: ${voiceoverUrl}`)
+          console.log(`[video] Voiceover ready`)
         } catch (err) {
           console.warn(`[video] Voiceover skipped: ${err.message}`)
         }
       }
 
-      // Step 2: Build video with FFmpeg
+      // Step 2: Build video frames + assemble
       console.log(`[video] Building 1080x1920 video for ${shortId}`)
-      await buildVideoFFmpeg(short, localAudioPath, videoPath)
+      const scenes = buildScenes(short)
+      const title = short.title || short.topic || ''
+      await buildVideo(scenes, title, localAudioPath, videoPath, tmpDir)
 
-      // Step 3: Upload video to Supabase Storage
-      console.log(`[video] Uploading video for ${shortId}`)
+      // Step 3: Upload video
+      console.log(`[video] Uploading video`)
       const videoBuffer = await fs.readFile(videoPath)
       const videoUrl = await uploadToSupabase(
         req.supabase, videoBuffer,
         `${req.user.id}/${shortId}/video.mp4`, 'video/mp4'
       )
 
-      // Step 4: Save and mark ready
       await req.supabase.from('shorts').update({
         video_url: videoUrl,
         ...(voiceoverUrl ? { voiceover_url: voiceoverUrl } : {}),
         status: 'ready'
       }).eq('id', shortId)
 
-      console.log(`[video] Done! ${shortId} → ${videoUrl}`)
+      console.log(`[video] Done! ${shortId}`)
     } catch (err) {
       console.error(`[video] Pipeline failed for ${shortId}:`, err.message)
       await req.supabase.from('shorts').update({ status: 'failed' }).eq('id', shortId)
     } finally {
-      // Cleanup temp files
       await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {})
     }
   })()
 })
 
-// GET /api/video/status/:shortId
 router.get('/status/:shortId', requireAuth, async (req, res) => {
   const { data: short } = await req.supabase
     .from('shorts')
@@ -372,7 +332,6 @@ router.get('/status/:shortId', requireAuth, async (req, res) => {
     .eq('id', req.params.shortId)
     .eq('user_id', req.user.id)
     .single()
-
   if (!short) return res.status(404).json({ error: 'Short not found' })
   res.json(short)
 })

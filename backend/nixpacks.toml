@@ -1,15 +1,8 @@
 [phases.setup]
-nixPkgs = ["ffmpeg", "fontconfig", "freetype", "dejavu_fonts"]
+nixPkgs = ["ffmpeg", "cairo", "pango", "libpng", "libjpeg", "giflib", "librsvg", "pkg-config"]
 
 [phases.install]
 cmds = ["npm install"]
-
-[phases.build]
-cmds = [
-  "mkdir -p /app/assets",
-  "find /nix/store -name 'DejaVuSans.ttf' 2>/dev/null | head -1 > /app/assets/font_path.txt",
-  "cat /app/assets/font_path.txt"
-]
 
 [start]
 cmd = "npm start"
