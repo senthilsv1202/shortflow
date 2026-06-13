@@ -9,7 +9,7 @@ import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
-import { createCanvas } from '@napi-rs/canvas'
+import { createCanvas, GlobalFonts } from '@napi-rs/canvas'
 import { promises as fs } from 'fs'
 import { execSync } from 'child_process'
 import path from 'path'
@@ -20,6 +20,45 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path)
 const router = Router()
 const W = 1080
 const H = 1920
+const FONT_NAME = 'ShortFlowFont'
+let fontLoaded = false
+
+async function ensureFont() {
+  if (fontLoaded) return
+  const fontFile = '/tmp/shortflow-font.ttf'
+  // Check if already downloaded
+  try {
+    await fs.access(fontFile)
+    GlobalFonts.registerFromPath(fontFile, FONT_NAME)
+    fontLoaded = true
+    console.log('[video] Font registered from cache')
+    return
+  } catch {}
+  // Download font
+  const urls = [
+    'https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2',
+    'https://raw.githubusercontent.com/rsms/inter/master/docs/font-files/Inter-Regular.ttf',
+    'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff2',
+  ]
+  for (const url of urls) {
+    try {
+      console.log('[video] Downloading font from', url)
+      const res = await fetch(url)
+      if (!res.ok) continue
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length < 5000) continue
+      await fs.writeFile(fontFile, buf)
+      GlobalFonts.registerFromPath(fontFile, FONT_NAME)
+      fontLoaded = true
+      console.log('[video] Font downloaded and registered:', buf.length, 'bytes')
+      return
+    } catch(e) { console.warn('[video] Font URL failed:', e.message) }
+  }
+  console.warn('[video] Could not load font — text may be invisible')
+}
+
+// Pre-load font on startup
+ensureFont().catch(() => {})
 
 // ── ElevenLabs voiceover ───────────────────────────────────────────────────
 
@@ -124,7 +163,7 @@ function drawScene(scene, title, index) {
 
   // Title at top
   ctx.fillStyle = '#FFFFFF'
-  ctx.font = 'bold 52px sans-serif'
+  ctx.font = `bold 52px "${FONT_NAME}", sans-serif`
   ctx.textAlign = 'center'
   const titleLines = wrapText(ctx, title.toUpperCase(), W - 120)
   titleLines.slice(0, 2).forEach((line, i) => {
@@ -150,14 +189,14 @@ function drawScene(scene, title, index) {
   // Step number
   if (scene.stepNum !== null) {
     ctx.fillStyle = '#FF3B3B'
-    ctx.font = 'bold 120px sans-serif'
+    ctx.font = `bold 120px "${FONT_NAME}", sans-serif`
     ctx.textAlign = 'left'
     ctx.fillText(`${scene.stepNum}`, cardPad + 40, cardY + 140)
   }
 
   // Scene text
   const textSize = scene.isHook ? 58 : 52
-  ctx.font = `${scene.isHook ? 'bold' : 'normal'} ${textSize}px sans-serif`
+  ctx.font = `${scene.isHook ? 'bold' : 'normal'} ${textSize}px "${FONT_NAME}", sans-serif`
   ctx.fillStyle = '#FFFFFF'
   ctx.textAlign = scene.stepNum !== null ? 'left' : 'center'
   const textX = scene.stepNum !== null ? cardPad + 200 : W / 2
@@ -175,7 +214,7 @@ function drawScene(scene, title, index) {
     ctx.fillStyle = '#FF3B3B'
     ctx.fillRect(0, H - 180, W, 180)
     ctx.fillStyle = '#FFFFFF'
-    ctx.font = 'bold 52px sans-serif'
+    ctx.font = `bold 52px "${FONT_NAME}", sans-serif`
     ctx.textAlign = 'center'
     ctx.fillText(scene.text, W / 2, H - 95)
   }
@@ -297,6 +336,7 @@ router.post('/generate/:shortId', requireAuth, async (req, res) => {
 
       // Step 2: Build video frames + assemble
       console.log(`[video] Building 1080x1920 video for ${shortId}`)
+      await ensureFont()
       const scenes = buildScenes(short)
       const title = short.title || short.topic || ''
       await buildVideo(scenes, title, localAudioPath, videoPath, tmpDir)
