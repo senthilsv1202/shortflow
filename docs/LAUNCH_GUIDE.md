@@ -2,13 +2,14 @@
 
 ## Overview
 ShortFlow is a YouTube Shorts automation SaaS:
-- Frontend: React + Vite  →  deploy to Vercel (free)
-- Backend:  Node.js + Express  →  deploy to Railway ($5/mo)
-- Database: Supabase  →  free tier covers 500MB
-- AI:       Anthropic Claude  →  ~$5/mo for early users
-- Payments: Stripe
+- Frontend: React + Vite + Tailwind CSS v4 + Lucide + Framer Motion  →  Vercel (free)
+- Backend:  Node.js + Express  →  Railway ($5/mo)
+- Database: Supabase (Postgres + Auth + Storage)  →  free tier
+- AI:       Anthropic Claude Sonnet 4.6  →  ~$5/mo
+- Voiceover: ElevenLabs Turbo v2  →  free / $5 credits
+- Video:    @napi-rs/canvas + FFmpeg  →  1080p HD, no watermark
 - YouTube:  Google OAuth + YouTube Data API v3
-- Voiceover: ElevenLabs (optional)
+- Payments: Stripe
 
 ---
 
@@ -26,7 +27,7 @@ ShortFlow is a YouTube Shorts automation SaaS:
 
 1. https://console.anthropic.com  →  Create API key
 2. Add to backend .env:  ANTHROPIC_API_KEY=sk-ant-...
-3. Model used: claude-sonnet-4-20250514
+3. Model used: claude-sonnet-4-6
 
 ---
 

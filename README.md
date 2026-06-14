@@ -1,25 +1,43 @@
-# ShortFlow — YouTube Shorts Automation SaaS
+# ShortFlow — AI-Powered YouTube Shorts Automation
 
-AI-powered platform to create, schedule, and auto-publish viral YouTube Shorts. Describe a topic, pick a style, and ShortFlow writes the script, generates a voiceover, scores it for virality, and publishes it to YouTube — all on autopilot.
+Create, voice, and publish viral YouTube Shorts on autopilot. Enter a topic, pick a voice, and ShortFlow generates the script (Claude AI), voiceover (ElevenLabs), video (Canvas + FFmpeg), and publishes to YouTube — all from one dashboard.
 
 ---
 
 ## Table of Contents
 
-1. [What You Can Do](#what-you-can-do)
-2. [Quick Start (Development)](#quick-start-development)
-3. [Walkthrough with Examples](#walkthrough-with-examples)
-   - [Sign Up & Log In](#1-sign-up--log-in)
-   - [Create Your First Short](#2-create-your-first-short)
-   - [Review & Save to Library](#3-review--save-to-library)
-   - [Connect a YouTube Channel](#4-connect-a-youtube-channel)
-   - [Schedule Publishing](#5-schedule-publishing)
-   - [Track Analytics](#6-track-analytics)
-   - [Manage Settings & Themes](#7-manage-settings--themes)
-4. [Plans & Limits](#plans--limits)
-5. [Project Structure](#project-structure)
+1. [Tech Stack](#tech-stack)
+2. [What You Can Do](#what-you-can-do)
+3. [Quick Start](#quick-start)
+4. [Full Workflow — Step by Step](#full-workflow--step-by-step)
+   - [Sign Up](#1-sign-up)
+   - [Create a Short with AI](#2-create-a-short-with-ai)
+   - [Generate Video + Voiceover](#3-generate-video--voiceover)
+   - [Publish to YouTube](#4-publish-to-youtube)
+   - [Connect YouTube Channel](#5-connect-youtube-channel)
+   - [Schedule Posts](#6-schedule-posts)
+   - [Track Performance](#7-track-performance)
+5. [Architecture](#architecture)
 6. [Environment Variables](#environment-variables)
 7. [Deploy to Production](#deploy-to-production)
+8. [Plans & Billing](#plans--billing)
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Frontend** | React 18 + Vite + Tailwind CSS v4 | SPA with glass-morphism dark UI |
+| **UI** | Lucide React + Framer Motion | Icons + page transitions |
+| **Auth + DB** | Supabase (Postgres + Auth + Storage) | Users, shorts, channels, media files |
+| **AI Scripts** | Claude Sonnet 4.6 (Anthropic API) | Script generation, SEO scoring |
+| **Voiceover** | ElevenLabs (Turbo v2) | 6 voices — 3 male, 3 female |
+| **Video** | @napi-rs/canvas + FFmpeg | 1080x1920 HD video with timed text scenes |
+| **YouTube** | Google OAuth 2.0 + YouTube Data API v3 | Channel connection + video upload |
+| **Payments** | Stripe (Checkout + Webhooks) | Free / Creator / Agency plans |
+| **Frontend Host** | Vercel | Free tier |
+| **Backend Host** | Railway | ~$5/mo |
 
 ---
 
@@ -27,223 +45,238 @@ AI-powered platform to create, schedule, and auto-publish viral YouTube Shorts. 
 
 | Feature | Description |
 |---|---|
-| **AI Script Generation** | Enter a topic → Claude writes a hook, full script, description, and tags |
-| **Viral & SEO Scoring** | Every short gets a viral score and SEO score out of 100 |
-| **6 Video Styles** | Talking Head, Text Animation, B-Roll + VO, Slide Deck, Animation, Reddit Story |
-| **10 Niches** | Tech, Finance, Health, Gaming, Education, Motivation, Food, Travel, True Crime, Business |
-| **Voiceover Generation** | ElevenLabs integration generates an audio track from your script |
-| **YouTube Auto-Publish** | OAuth-connect your channel and publish directly from the app |
-| **Schedule Builder** | Set a weekly posting schedule — pick days/times and let it run |
-| **Library** | All your drafts, scheduled, and published shorts in one place |
-| **Analytics Dashboard** | Views, likes, comments, watch time, and subscriber growth |
-| **7 Themes** | Dark, Light, Purple, Blue, Green, Rose, Amber |
-| **Stripe Billing** | Free / Creator / Agency subscription tiers |
+| **AI Script Generation** | Enter a topic → Claude writes hook, script, description, tags, SEO score, viral score |
+| **6 Voice Options** | Choose male or female — Josh, Arnold, Adam, Rachel, Domi, Bella |
+| **1080p Video Generation** | Canvas renders styled scenes → FFmpeg assembles HD MP4 with voiceover |
+| **YouTube Auto-Publish** | OAuth-connect your channel → publish directly with privacy settings |
+| **Library Management** | All drafts, generating, ready, scheduled, published, and failed shorts |
+| **Schedule Builder** | Set weekly posting slots — auto-publish at scheduled times |
+| **Analytics Dashboard** | Views, likes, comments, watch time, subscriber growth |
+| **Stripe Billing** | Free (10/mo), Creator ($19/mo, 50), Agency ($49/mo, unlimited) |
+| **Modern UI** | Dark glass-morphism design with Tailwind, Lucide icons, Framer Motion animations |
 
 ---
 
-## Quick Start (Development)
+## Quick Start
 
 ### Prerequisites
 - Node.js 18+
-- A [Supabase](https://supabase.com) project (free)
-- API keys: Anthropic (Claude), ElevenLabs, Stripe (optional), Google OAuth (optional for YouTube)
+- [Supabase](https://supabase.com) project (free)
+- [Anthropic](https://console.anthropic.com) API key ($5 credit)
+- [ElevenLabs](https://elevenlabs.io) API key (free or $5 credits)
+- [Google Cloud](https://console.cloud.google.com) project with YouTube Data API v3
 
 ### 1. Database
-1. Create a new project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor** and run the contents of `backend/schema.sql`
-3. Go to **Authentication → URL Configuration** and set:
-   - **Site URL**: `http://localhost:3000`
-   - **Redirect URLs**: `http://localhost:3000`
+```bash
+# Create a Supabase project, then run the schema:
+# Supabase Dashboard → SQL Editor → paste backend/schema.sql → Run
+
+# Also create a storage bucket:
+# Supabase Dashboard → Storage → New bucket → "shorts-media" (public)
+
+# Authentication → URL Configuration:
+#   Site URL: http://localhost:5173
+#   Redirect URLs: http://localhost:5173
+```
 
 ### 2. Frontend
 ```bash
 cd frontend
 cp .env.example .env
-# Fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+# Set VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_URL
 npm install
-npm run dev   # http://localhost:5173
+npm run dev   # → http://localhost:5173
 ```
 
 ### 3. Backend
 ```bash
 cd backend
 cp .env.example .env
-# Fill in all API keys (see Environment Variables section)
+# Set all API keys (see Environment Variables below)
 npm install
-npm run dev   # http://localhost:3001
+npm run dev   # → http://localhost:3001
 ```
 
 ---
 
-## Walkthrough with Examples
+## Full Workflow — Step by Step
 
-### 1. Sign Up & Log In
+### 1. Sign Up
 
-1. Open `http://localhost:5173` (or your deployed URL)
-2. Click **Sign up free** on the auth page
-3. Enter your name, email, and a password (min 6 characters)
-4. Check your email and click the confirmation link
-5. You'll be redirected back and logged in automatically
+1. Open the app → click **Sign up free**
+2. Enter name, email, password (min 6 characters)
+3. Check email → click confirmation link
+4. Redirected to Dashboard — you're logged in
 
-> **Free plan** gives you 10 shorts per month — no credit card needed.
+> Free plan: 10 shorts/month, no credit card needed.
 
 ---
 
-### 2. Create Your First Short
+### 2. Create a Short with AI
 
-Navigate to **✨ Create** in the sidebar.
+Navigate to **Create** in the sidebar.
 
-**Example: Tech short about Python**
+**Example inputs:**
 
-| Field | Example Value |
+| Field | Value |
 |---|---|
 | Topic | `5 Python tricks every developer should know` |
-| Niche | `Tech & Programming` |
-| Video Style | `Talking Head 🎤` |
-| Tone | `Energetic & Engaging` |
-| Duration | `45–60 seconds` |
-| Language | `English` |
+| Niche | Tech & Programming |
+| Style | Talking Head |
+| Tone | Energetic & Engaging |
+| Duration | 45–60 seconds |
 
-Click **Generate Short →** and the AI will:
-1. Analyze the topic for trends
-2. Write a viral hook + full script
-3. Optimize title, description, and tags for YouTube SEO
-4. Generate a voiceover (if ElevenLabs is configured)
-5. Score it for virality and SEO
-
-**Example output:**
+Click **Generate Short** → Claude AI writes:
 
 ```
 Title:       "5 Python Tricks That Will 10x Your Code Speed"
-Hook:        "You won't believe how much faster your Python can run..."
-Script:      [HOOK] You won't believe...
-             [MAIN] Here are the 5 tricks:
-             1. List comprehensions...
-             [CTA] Follow for more Python tips!
-Tags:        #python #coding #programming #shorts #viral
-Viral Score: 82 / 100
+Hook:        "Stop writing slow Python. Here's what senior devs actually do..."
+Script:      [HOOK] Stop writing slow Python...
+             [MAIN] Trick 1: List comprehensions instead of loops...
+             Trick 2: Use walrus operator...
+             Trick 3: F-strings over format()...
+             [CTA] Follow for daily Python tips!
+Tags:        #python #coding #shorts #viral #programming
 SEO Score:   88 / 100
+Viral Score: 82 / 100
+Key Points:  ["List comprehensions", "Walrus operator", "F-strings"]
 ```
 
-**More topic ideas by niche:**
+The short is saved to your Library as a **draft**.
 
-| Niche | Example Topic |
+**Topic ideas by niche:**
+
+| Niche | Topic |
 |---|---|
-| Finance & Money | `How to save $1000 in 30 days` |
-| Health & Fitness | `The 5-minute morning routine that changed my life` |
+| Finance | `How to save $1000 in 30 days` |
+| Health | `The 5-minute morning routine that changed my life` |
 | Gaming | `3 settings pro players always use in Valorant` |
 | Motivation | `One habit that separates millionaires from everyone else` |
 | True Crime | `The strangest unsolved disappearance of 2023` |
+| Food | `The $2 meal that tastes like a $50 restaurant dish` |
 
 ---
 
-### 3. Review & Save to Library
+### 3. Generate Video + Voiceover
 
-After generation you'll see a results card with the full script, scores, and metadata.
+In the **Library**, click a draft short → you'll see a detail modal.
 
-- Click **Save to Library →** to store it as a draft
-- Click **+ New Short** to start fresh
-- Go to **📚 Library** in the sidebar to see all your shorts
-
-In the Library you can:
-- Filter by status: Draft / Scheduled / Published
-- Click a short to view the full script and metadata
-- Delete shorts you no longer need
-
----
-
-### 4. Connect a YouTube Channel
-
-Navigate to **📺 Channels** in the sidebar.
-
-1. Click **Connect YouTube Channel**
-2. Sign in with your Google account and grant permissions
-3. Your channel name, subscriber count, and thumbnail will appear
-
-Once connected, you can select this channel when scheduling or publishing a short.
-
-> YouTube OAuth requires a Google Cloud project with the YouTube Data API v3 enabled and OAuth credentials in your backend `.env`.
+1. **Choose a voice** — toggle Male/Female, then pick one:
+   - **Male**: Josh (deep), Arnold (strong), Adam (calm)
+   - **Female**: Rachel (warm), Domi (energetic), Bella (soft)
+2. Click **Generate Video**
+3. Wait ~1-2 minutes — the pipeline:
+   - Sends script to ElevenLabs → generates MP3 voiceover
+   - Uploads audio to Supabase Storage
+   - Renders 5 timed scene frames with @napi-rs/canvas:
+     - Scene 1: Hook (attention grabber)
+     - Scenes 2-4: Key points with step numbers
+     - Scene 5: Call-to-action
+   - FFmpeg combines frames + audio → 1080x1920 MP4
+   - Uploads video to Supabase Storage
+4. Status changes to **ready** → video preview appears in the modal
 
 ---
 
-### 5. Schedule Publishing
+### 4. Publish to YouTube
 
-Navigate to **📅 Schedule** in the sidebar.
+Once a video is **ready**:
 
-**Example weekly schedule:**
-- Monday 9:00 AM — Tech short
-- Wednesday 6:00 PM — Finance short
-- Friday 12:00 PM — Motivation short
-
-1. Click a time slot on the weekly grid
-2. Pick a short from your Library
-3. Select which connected channel to publish to
-4. Set privacy: Public / Unlisted / Private
-5. Save — the backend cron job will auto-publish at the scheduled time
+1. Select your connected channel from the dropdown
+2. Choose privacy: **Public** / **Unlisted** / **Private**
+3. Click **Publish Now**
+4. OAuth token auto-refreshes → video uploads to YouTube
+5. Status changes to **published** → YouTube link appears
 
 ---
 
-### 6. Track Analytics
+### 5. Connect YouTube Channel
 
-Navigate to **📊 Analytics** in the sidebar.
+Navigate to **Channels** in the sidebar.
 
-The dashboard shows (last 30 days by default):
-- Total views, likes, comments, shares
+1. Click **Add YouTube Channel**
+2. Google OAuth prompt → sign in and grant permissions
+3. Channel name, subscribers, and thumbnail appear
+4. Channel is now available for publishing
+
+**Requirements:**
+- Google Cloud project with YouTube Data API v3 enabled
+- OAuth 2.0 credentials (Web application type)
+- Redirect URI: `https://your-backend-url/api/youtube/callback`
+- Add yourself as a Test User in the OAuth consent screen (while in testing mode)
+
+---
+
+### 6. Schedule Posts
+
+Navigate to **Schedule** in the sidebar.
+
+- Set weekly posting slots (day + time)
+- Pick a short from your Library
+- Choose which channel to publish to
+- Backend cron job auto-publishes at scheduled times
+
+---
+
+### 7. Track Performance
+
+Navigate to **Analytics** in the sidebar.
+
+- Views, likes, comments, shares (last 30 days)
 - Subscriber growth
-- Watch time in minutes
+- Watch time
 - Per-short performance breakdown
 
-> Analytics populate after publishing. For connected YouTube channels, data syncs automatically.
-
 ---
 
-### 7. Manage Settings & Themes
-
-Navigate to **⚙️ Settings** in the sidebar.
-
-- **Profile** — update your name and avatar
-- **Defaults** — set your default niche, tone, and language so you don't have to pick them every time
-- **Notifications** — toggle alerts for published shorts, trending content, weekly reports, and YPP eligibility
-- **Watermark** — add a text watermark to your videos
-- **Theme** — choose from 7 color themes via the toggle in the top bar: Dark, Light, Purple, Blue, Green, Rose, Amber
-
----
-
-## Plans & Limits
-
-| Plan | Shorts/Month | Price | Features |
-|---|---|---|---|
-| **Free** | 10 | $0 | All core features |
-| **Creator** | 50 | $19/mo | Priority generation, analytics export |
-| **Agency** | Unlimited | $49/mo | Multiple channels, team seats |
-
-Upgrade via **💳 Pricing** in the sidebar. Billing is handled by Stripe.
-
----
-
-## Project Structure
+## Architecture
 
 ```
 shortflow/
-├── frontend/                   # React + Vite SPA
+├── frontend/                        # React 18 + Vite + Tailwind CSS v4
 │   ├── src/
-│   │   ├── pages/              # Dashboard, Create, Library, Schedule,
-│   │   │                       # Channels, Analytics, Pricing, Settings
-│   │   ├── components/         # Sidebar, Topbar, Modal
-│   │   ├── hooks/              # useAuth, useTheme, useToast
-│   │   ├── lib/                # supabase.js, api.js
-│   │   └── styles/             # globals.css (7 themes)
+│   │   ├── pages/                   # Dashboard, Create, Library, Schedule,
+│   │   │                            # Channels, Analytics, Pricing, Settings, Auth
+│   │   ├── components/              # Sidebar (Lucide icons), Topbar, Modal
+│   │   ├── hooks/                   # useAuth, useTheme, useToast
+│   │   ├── lib/                     # supabase.js (client), api.js (backend calls)
+│   │   └── styles/                  # globals.css (Tailwind + glass-morphism tokens)
+│   ├── vite.config.js               # Vite + @tailwindcss/vite plugin
 │   └── package.json
-├── backend/                    # Node.js + Express API
+├── backend/                         # Node.js + Express
 │   ├── src/
-│   │   ├── routes/             # generate, youtube, billing,
-│   │   │                       # analytics, schedule, voice
-│   │   ├── middleware/         # auth.js
-│   │   └── server.js
-│   ├── schema.sql              # Full Supabase schema + triggers
+│   │   ├── routes/
+│   │   │   ├── generate.js          # Claude AI script generation
+│   │   │   ├── video.js             # ElevenLabs + Canvas + FFmpeg pipeline
+│   │   │   ├── publish.js           # YouTube upload with token refresh
+│   │   │   ├── youtube.js           # OAuth flow + channel sync
+│   │   │   ├── voice.js             # ElevenLabs voiceover API
+│   │   │   ├── billing.js           # Stripe checkout + webhooks
+│   │   │   ├── schedule.js          # Scheduled posts
+│   │   │   └── analytics.js         # YouTube analytics sync
+│   │   ├── middleware/auth.js       # Supabase JWT verification
+│   │   └── server.js               # Express app + CORS + rate limiting
+│   ├── schema.sql                   # Supabase Postgres schema + RLS policies
+│   ├── nixpacks.toml                # Railway build config (FFmpeg)
 │   └── package.json
 └── docs/
-    └── LAUNCH_GUIDE.md         # Step-by-step deployment guide
+    └── LAUNCH_GUIDE.md
+```
+
+### Video Generation Pipeline
+
+```
+Topic → Claude AI → Script + Hook + Key Points + SEO Score
+                         ↓
+              ElevenLabs Turbo v2 → MP3 Voiceover
+                         ↓
+              @napi-rs/canvas → PNG Frames (5 scenes)
+                         ↓
+              FFmpeg concat + audio → 1080x1920 MP4
+                         ↓
+              Supabase Storage → video_url
+                         ↓
+              YouTube Data API v3 → Published Short
 ```
 
 ---
@@ -251,27 +284,39 @@ shortflow/
 ## Environment Variables
 
 ### Frontend (`frontend/.env`)
-```
+```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_API_URL=http://localhost:3001
+VITE_API_URL=http://localhost:3001/api          # Local
+# VITE_API_URL=https://your-backend.railway.app/api  # Production
 ```
 
 ### Backend (`backend/.env`)
-```
+```bash
+# Database
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key
+SUPABASE_SERVICE_KEY=your-service-role-key      # NOT the anon key
 
-ANTHROPIC_API_KEY=sk-ant-...
-ELEVENLABS_API_KEY=...
+# AI
+ANTHROPIC_API_KEY=sk-ant-...                    # Claude Sonnet 4.6
 
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
+# Voiceover
+ELEVENLABS_API_KEY=...                          # ElevenLabs API
 
+# YouTube
+YOUTUBE_CLIENT_ID=...                           # Google Cloud OAuth
+YOUTUBE_CLIENT_SECRET=...
+YOUTUBE_REDIRECT_URI=http://localhost:3001/api/youtube/callback
+
+# Payments
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_CREATOR_PRICE_ID=price_...
+STRIPE_AGENCY_PRICE_ID=price_...
 
+# App
 PORT=3001
+FRONTEND_URL=http://localhost:5173
 ```
 
 ---
@@ -282,11 +327,47 @@ PORT=3001
 |---|---|---|
 | [Vercel](https://vercel.com) | Frontend | Free |
 | [Railway](https://railway.app) | Backend | ~$5/mo |
-| [Supabase](https://supabase.com) | Database + Auth | Free tier |
+| [Supabase](https://supabase.com) | DB + Auth + Storage | Free tier |
+| [ElevenLabs](https://elevenlabs.io) | Voiceover | Free / $5 credits |
+| [Anthropic](https://console.anthropic.com) | Claude AI | ~$5/mo |
 
-1. **Frontend → Vercel**: connect your GitHub repo, set root to `frontend/`, add env vars
-2. **Backend → Railway**: connect repo, set root to `backend/`, add env vars
-3. **Supabase**: update **Authentication → URL Configuration** with your production domain
-4. Update `VITE_API_URL` in Vercel to point to your Railway backend URL
+### Steps
 
-See `docs/LAUNCH_GUIDE.md` for the full step-by-step deployment guide.
+1. **Supabase** — create project, run `schema.sql`, create `shorts-media` storage bucket (public)
+2. **Railway** — deploy from GitHub, root: `backend/`, add all backend env vars
+3. **Vercel** — deploy from GitHub, root: `frontend/`, add frontend env vars
+4. **Google Cloud** — create OAuth credentials, set redirect URI to Railway URL
+5. Update `VITE_API_URL` in Vercel to `https://your-backend.railway.app/api`
+6. Update `FRONTEND_URL` in Railway to `https://your-app.vercel.app`
+7. Update Supabase Auth URL Configuration with production domain
+
+See `docs/LAUNCH_GUIDE.md` for the full step-by-step guide.
+
+---
+
+## Plans & Billing
+
+| Plan | Shorts/Month | Price | Features |
+|---|---|---|---|
+| **Free** | 10 | $0 | All core features, 1 channel |
+| **Creator** | 50 | $19/mo | Priority generation, analytics export |
+| **Agency** | Unlimited | $49/mo | Multiple channels, team seats |
+
+Billing via Stripe. Upgrade from the **Pricing** page in the sidebar.
+
+---
+
+## What Changed in the Latest Redesign
+
+| Before | After |
+|---|---|
+| Inline styles everywhere | **Tailwind CSS v4** with design tokens |
+| Emoji icons | **Lucide React** icon library |
+| No page transitions | **Framer Motion** AnimatePresence |
+| Basic dark theme | **Glass-morphism** dark UI (backdrop-blur, transparency) |
+| Mock data fallback | **Real Supabase data** only |
+| Creatomate cloud rendering | **Canvas + FFmpeg** (no external API, no watermark, full 1080p) |
+| No voice selection | **6 ElevenLabs voices** with Male/Female picker |
+| No video preview | **In-modal video player** before publishing |
+| Token expired on publish | **Auto-refresh** OAuth tokens before upload |
+| `localhost` API URL in prod | **Proper env var** configuration |
