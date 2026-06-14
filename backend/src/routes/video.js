@@ -98,32 +98,94 @@ async function uploadToSupabase(supabase, buffer, filename, contentType) {
 
 function buildScenes(short) {
   const rawScript = short.script || short.hook || short.title || ''
-  const lines = rawScript
-    .split(/\n+/)
-    .map(l => l.replace(/\[.*?\]/g, '').trim())
-    .filter(l => l.length > 15)
-    .map(l => l.length > 80 ? l.slice(0, 77) + '...' : l)
-    .slice(0, 4)
+  const scenes = []
 
-  if (lines.length === 0) lines.push(short.hook || short.title || 'Watch this!')
+  // ── Scene 1: Hook ──
+  const hook = short.hook || short.title || 'Watch this!'
+  scenes.push({ text: hook.slice(0, 90), isHook: true, isCta: false, stepNum: null })
 
-  const allScenes = []
-  if (short.hook && short.hook.length > 10) allScenes.push(short.hook.slice(0, 80))
-  allScenes.push(...lines)
-  if (short.cta) allScenes.push(short.cta.slice(0, 80))
-  else allScenes.push('Follow for more! 🔥')
+  // ── Scenes 2+: Extract numbered tips/steps from script ──
+  // Match patterns like: "Number one —", "1.", "1)", "Tip 1:", "Step 1:", "First —"
+  const tipPatterns = [
+    /(?:Number\s+(?:one|two|three|four|five|six|seven|eight|nine|ten))\s*[—–\-:.]?\s*(.*?)(?=(?:Number\s+(?:one|two|three|four|five|six|seven|eight|nine|ten))|$)/gi,
+    /(?:^|\n)\s*(\d+)\s*[.):\-—–]\s*(.*?)(?=(?:\n\s*\d+\s*[.):\-—–])|$)/gs,
+    /(?:^|\n)\s*(?:Step|Tip|Trick|Point|Rule)\s*(\d+)\s*[.:—–\-]?\s*(.*?)(?=(?:Step|Tip|Trick|Point|Rule)\s*\d+|$)/gi,
+  ]
 
-  const finalScenes = [...new Set(allScenes)].filter(Boolean).slice(0, 5)
-  const sceneDuration = Math.max(55 / finalScenes.length, 8)
+  let tips = []
 
-  return finalScenes.map((text, i) => ({
-    time: i * sceneDuration,
-    duration: sceneDuration,
-    text,
-    isHook: i === 0,
-    isCta: i === finalScenes.length - 1,
-    stepNum: i > 0 && i < finalScenes.length - 1 ? i : null
-  }))
+  // Try "Number one" pattern first
+  const numberWords = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 }
+  const wordMatches = [...rawScript.matchAll(/Number\s+(one|two|three|four|five|six|seven)\s*[—–\-:.]?\s*(.*?)(?=Number\s+(?:one|two|three|four|five|six|seven)|If you|These|Drop|Follow|$)/gi)]
+  if (wordMatches.length >= 2) {
+    tips = wordMatches.map(m => ({
+      num: numberWords[m[1].toLowerCase()] || 0,
+      text: m[2].replace(/\.\s*$/, '').trim()
+    }))
+  }
+
+  // Try "1." or "1)" pattern
+  if (tips.length < 2) {
+    const digitMatches = [...rawScript.matchAll(/(\d+)\s*[.):\-—–]\s*(.*?)(?=\d+\s*[.):\-—–]|If you|These|Drop|Follow|$)/gs)]
+    if (digitMatches.length >= 2) {
+      tips = digitMatches.map(m => ({
+        num: parseInt(m[1]),
+        text: m[2].replace(/\.\s*$/, '').trim()
+      }))
+    }
+  }
+
+  // Try key_points from Claude's structured output
+  if (tips.length < 2 && short.key_points && short.key_points.length >= 2) {
+    tips = short.key_points
+      .filter(p => p && p.trim().length > 5)
+      .map((p, i) => ({ num: i + 1, text: p.trim() }))
+  }
+
+  // Fallback: split by sentences and take the meatiest ones
+  if (tips.length < 2) {
+    const sentences = rawScript
+      .replace(/\[.*?\]/g, '')
+      .split(/[.!?]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 20 && s.length < 120)
+      .slice(1, 5) // skip first (usually the hook)
+    tips = sentences.map((s, i) => ({ num: i + 1, text: s }))
+  }
+
+  // Add tip scenes (max 5 tips)
+  tips.slice(0, 5).forEach(tip => {
+    // Clean up the text — take first 1-2 sentences, max 80 chars
+    let text = tip.text
+      .split(/[.!?]/)
+      .filter(s => s.trim().length > 5)
+      .slice(0, 2)
+      .join('. ')
+      .trim()
+    if (text.length > 80) text = text.slice(0, 77) + '...'
+    if (text.length > 10) {
+      scenes.push({ text, isHook: false, isCta: false, stepNum: tip.num })
+    }
+  })
+
+  // ── Last scene: CTA ──
+  const cta = short.cta || 'Follow for more tips!'
+  scenes.push({ text: cta.slice(0, 80), isHook: false, isCta: true, stepNum: null })
+
+  // Calculate timing — more time for steps, less for hook/CTA
+  const totalDuration = 58
+  const hookDur = 5
+  const ctaDur = 5
+  const stepCount = scenes.length - 2
+  const stepDur = stepCount > 0 ? Math.max((totalDuration - hookDur - ctaDur) / stepCount, 6) : 10
+
+  let time = 0
+  return scenes.map((scene, i) => {
+    const dur = scene.isHook ? hookDur : scene.isCta ? ctaDur : stepDur
+    const s = { ...scene, time, duration: dur }
+    time += dur
+    return s
+  })
 }
 
 // ── Canvas frame generator ─────────────────────────────────────────────────
@@ -150,14 +212,19 @@ const SCENE_PALETTES = [
   { bg1: '#0F0C29', bg2: '#302B63', bg3: '#24243E', accent: '#FF3B3B' }, // Hook — deep purple
   { bg1: '#000428', bg2: '#004E92', bg3: '#001F3F', accent: '#00D4FF' }, // Step 1 — ocean blue
   { bg1: '#0F2027', bg2: '#203A43', bg3: '#2C5364', accent: '#00F5A0' }, // Step 2 — teal green
-  { bg1: '#200122', bg2: '#6F0000', bg3: '#3D0000', accent: '#FF6B6B' }, // Step 3 — deep red
+  { bg1: '#1A0033', bg2: '#4A0072', bg3: '#2D004F', accent: '#C084FC' }, // Step 3 — purple
+  { bg1: '#0C1220', bg2: '#1E3A5F', bg3: '#0A1628', accent: '#FBD38D' }, // Step 4 — gold/navy
+  { bg1: '#200122', bg2: '#6F0000', bg3: '#3D0000', accent: '#FF6B6B' }, // Step 5 — deep red
   { bg1: '#FF3B3B', bg2: '#FF6B6B', bg3: '#CC0000', accent: '#FFFFFF' }, // CTA — solid red
 ]
 
 function drawScene(scene, title, index, totalScenes) {
   const canvas = createCanvas(W, H)
   const ctx = canvas.getContext('2d')
-  const palette = SCENE_PALETTES[Math.min(index, SCENE_PALETTES.length - 1)]
+  // CTA always gets the last palette (red), other scenes cycle through
+  const palette = scene.isCta
+    ? SCENE_PALETTES[SCENE_PALETTES.length - 1]
+    : SCENE_PALETTES[Math.min(index, SCENE_PALETTES.length - 2)]
   const font = `"${FONT_NAME}", sans-serif`
 
   // ── Background: rich gradient ──
