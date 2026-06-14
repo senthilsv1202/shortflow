@@ -21,7 +21,7 @@ export default function Library() {
   const [selected, setSelected] = useState(null)
   const [publishing, setPublishing] = useState(false)
   const [generatingVideo, setGeneratingVideo] = useState(false)
-  const [selectedVoice, setSelectedVoice] = useState('male')
+  const [selectedVoice, setSelectedVoice] = useState('TxGEqnHWrfWFTfGW9XjX')
   const [publishForm, setPublishForm] = useState({ channel_id:'', privacy:'public' })
 
   // Popular ElevenLabs voices

@@ -145,81 +145,168 @@ function wrapText(ctx, text, maxWidth) {
   return lines
 }
 
-function drawScene(scene, title, index) {
+// Color palettes per scene for visual variety
+const SCENE_PALETTES = [
+  { bg1: '#0F0C29', bg2: '#302B63', bg3: '#24243E', accent: '#FF3B3B' }, // Hook — deep purple
+  { bg1: '#000428', bg2: '#004E92', bg3: '#001F3F', accent: '#00D4FF' }, // Step 1 — ocean blue
+  { bg1: '#0F2027', bg2: '#203A43', bg3: '#2C5364', accent: '#00F5A0' }, // Step 2 — teal green
+  { bg1: '#200122', bg2: '#6F0000', bg3: '#3D0000', accent: '#FF6B6B' }, // Step 3 — deep red
+  { bg1: '#FF3B3B', bg2: '#FF6B6B', bg3: '#CC0000', accent: '#FFFFFF' }, // CTA — solid red
+]
+
+function drawScene(scene, title, index, totalScenes) {
   const canvas = createCanvas(W, H)
   const ctx = canvas.getContext('2d')
+  const palette = SCENE_PALETTES[Math.min(index, SCENE_PALETTES.length - 1)]
+  const font = `"${FONT_NAME}", sans-serif`
 
-  // Background gradient
-  const grad = ctx.createLinearGradient(0, 0, 0, H)
-  grad.addColorStop(0, '#1A0A2E')
-  grad.addColorStop(0.5, '#0D0D1A')
-  grad.addColorStop(1, '#0A0A0F')
-  ctx.fillStyle = grad
+  // ── Background: rich gradient ──
+  const bgGrad = ctx.createLinearGradient(0, 0, W * 0.5, H)
+  bgGrad.addColorStop(0, palette.bg1)
+  bgGrad.addColorStop(0.5, palette.bg2)
+  bgGrad.addColorStop(1, palette.bg3)
+  ctx.fillStyle = bgGrad
   ctx.fillRect(0, 0, W, H)
 
-  // Red accent bar at top
-  ctx.fillStyle = '#FF3B3B'
-  ctx.fillRect(W / 2 - 100, 90, 200, 8)
+  // ── Decorative glow circle (top-right) ──
+  const glowGrad = ctx.createRadialGradient(W * 0.85, H * 0.12, 0, W * 0.85, H * 0.12, 350)
+  glowGrad.addColorStop(0, palette.accent + '30')
+  glowGrad.addColorStop(1, 'transparent')
+  ctx.fillStyle = glowGrad
+  ctx.fillRect(0, 0, W, H)
 
-  // Title at top
-  ctx.fillStyle = '#FFFFFF'
-  ctx.font = `bold 52px "${FONT_NAME}", sans-serif`
-  ctx.textAlign = 'center'
-  const titleLines = wrapText(ctx, title.toUpperCase(), W - 120)
-  titleLines.slice(0, 2).forEach((line, i) => {
-    ctx.fillText(line, W / 2, 160 + i * 65)
-  })
+  // ── Decorative glow circle (bottom-left) ──
+  const glow2 = ctx.createRadialGradient(W * 0.15, H * 0.88, 0, W * 0.15, H * 0.88, 300)
+  glow2.addColorStop(0, palette.accent + '20')
+  glow2.addColorStop(1, 'transparent')
+  ctx.fillStyle = glow2
+  ctx.fillRect(0, 0, W, H)
 
-  // Scene card
-  const cardY = Math.round(H * 0.36)
-  const cardH = 380
-  const cardPad = 60
-
-  // Card background
-  ctx.fillStyle = scene.isHook ? 'rgba(255,59,59,0.18)' : 'rgba(255,255,255,0.07)'
-  roundRect(ctx, cardPad, cardY, W - cardPad * 2, cardH, 24)
+  // ── Scene progress bar at very top ──
+  const barY = 60
+  const barW = W - 160
+  const barX = 80
+  ctx.fillStyle = 'rgba(255,255,255,0.1)'
+  roundRect(ctx, barX, barY, barW, 8, 4)
+  ctx.fill()
+  const progress = (index + 1) / totalScenes
+  ctx.fillStyle = palette.accent
+  roundRect(ctx, barX, barY, barW * progress, 8, 4)
   ctx.fill()
 
-  // Card border
-  ctx.strokeStyle = scene.isHook ? '#FF3B3B' : 'rgba(255,255,255,0.15)'
-  ctx.lineWidth = 2
-  roundRect(ctx, cardPad, cardY, W - cardPad * 2, cardH, 24)
-  ctx.stroke()
+  // ── Scene counter (01 / 05) ──
+  ctx.font = `bold 28px ${font}`
+  ctx.fillStyle = 'rgba(255,255,255,0.5)'
+  ctx.textAlign = 'right'
+  ctx.fillText(`${String(index + 1).padStart(2, '0')} / ${String(totalScenes).padStart(2, '0')}`, W - 80, barY + 55)
 
-  // Step number
-  if (scene.stepNum !== null) {
-    ctx.fillStyle = '#FF3B3B'
-    ctx.font = `bold 120px "${FONT_NAME}", sans-serif`
-    ctx.textAlign = 'left'
-    ctx.fillText(`${scene.stepNum}`, cardPad + 40, cardY + 140)
-  }
-
-  // Scene text
-  const textSize = scene.isHook ? 58 : 52
-  ctx.font = `${scene.isHook ? 'bold' : 'normal'} ${textSize}px "${FONT_NAME}", sans-serif`
-  ctx.fillStyle = '#FFFFFF'
-  ctx.textAlign = scene.stepNum !== null ? 'left' : 'center'
-  const textX = scene.stepNum !== null ? cardPad + 200 : W / 2
-  const textMaxW = scene.stepNum !== null ? W - cardPad * 2 - 200 : W - cardPad * 2 - 40
-  const textLines = wrapText(ctx, scene.text, textMaxW)
-  const lineH = textSize + 14
-  const totalTextH = textLines.length * lineH
-  const textStartY = cardY + (cardH - totalTextH) / 2 + textSize / 2
-  textLines.forEach((line, i) => {
-    ctx.fillText(line, textX, textStartY + i * lineH)
-  })
-
-  // CTA bar at bottom
   if (scene.isCta) {
-    ctx.fillStyle = '#FF3B3B'
-    ctx.fillRect(0, H - 180, W, 180)
+    // ── CTA scene — big bold centered ──
+    // Large accent circle behind text
+    const ctaGlow = ctx.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, 400)
+    ctaGlow.addColorStop(0, 'rgba(255,255,255,0.15)')
+    ctaGlow.addColorStop(1, 'transparent')
+    ctx.fillStyle = ctaGlow
+    ctx.fillRect(0, 0, W, H)
+
+    ctx.font = `bold 72px ${font}`
     ctx.fillStyle = '#FFFFFF'
-    ctx.font = `bold 52px "${FONT_NAME}", sans-serif`
     ctx.textAlign = 'center'
-    ctx.fillText(scene.text, W / 2, H - 95)
+    const ctaLines = wrapText(ctx, scene.text, W - 160)
+    const ctaStartY = H * 0.4
+    ctaLines.forEach((line, i) => {
+      ctx.fillText(line, W / 2, ctaStartY + i * 90)
+    })
+
+    // Arrow / subscribe hint
+    ctx.font = `bold 36px ${font}`
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'
+    ctx.fillText('SUBSCRIBE', W / 2, H * 0.72)
+
+    // Underline
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(W / 2 - 80, H * 0.72 + 12, 160, 4)
+
+  } else {
+    // ── Title at top ──
+    ctx.font = `bold 44px ${font}`
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.textAlign = 'center'
+    const titleLines = wrapText(ctx, title.toUpperCase(), W - 160)
+    titleLines.slice(0, 2).forEach((line, i) => {
+      ctx.fillText(line, W / 2, 160 + i * 56)
+    })
+
+    // ── Accent divider line under title ──
+    ctx.fillStyle = palette.accent
+    roundRect(ctx, W / 2 - 50, 170 + titleLines.slice(0, 2).length * 56, 100, 5, 3)
+    ctx.fill()
+
+    // ── Main content area ──
+    const contentY = H * 0.30
+    const contentH = H * 0.45
+    const pad = 70
+
+    if (scene.isHook) {
+      // Hook: large bold centered text
+      ctx.font = `bold 64px ${font}`
+      ctx.fillStyle = '#FFFFFF'
+      ctx.textAlign = 'center'
+      const hookLines = wrapText(ctx, scene.text, W - pad * 2)
+      const hookLineH = 80
+      const hookTotalH = hookLines.length * hookLineH
+      const hookStartY = contentY + (contentH - hookTotalH) / 2 + 50
+      hookLines.forEach((line, i) => {
+        ctx.fillText(line, W / 2, hookStartY + i * hookLineH)
+      })
+
+      // Accent underline under hook
+      const lastLineY = hookStartY + (hookLines.length - 1) * hookLineH + 20
+      ctx.fillStyle = palette.accent
+      ctx.fillRect(W / 2 - 60, lastLineY, 120, 6)
+
+    } else {
+      // Step scenes: number badge + text
+
+      // Big number badge (circle)
+      const badgeX = W / 2
+      const badgeY = contentY + 80
+      const badgeR = 65
+
+      // Circle background
+      ctx.beginPath()
+      ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2)
+      ctx.fillStyle = palette.accent
+      ctx.fill()
+
+      // Number in circle
+      ctx.font = `bold 72px ${font}`
+      ctx.fillStyle = '#FFFFFF'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(`${scene.stepNum}`, badgeX, badgeY)
+      ctx.textBaseline = 'alphabetic'
+
+      // Step text below badge
+      const textY = badgeY + badgeR + 60
+      ctx.font = `bold 52px ${font}`
+      ctx.fillStyle = '#FFFFFF'
+      ctx.textAlign = 'center'
+      const stepLines = wrapText(ctx, scene.text, W - pad * 2)
+      stepLines.forEach((line, i) => {
+        ctx.fillText(line, W / 2, textY + i * 68)
+      })
+    }
+
+    // ── Bottom branding bar ──
+    ctx.fillStyle = 'rgba(255,255,255,0.04)'
+    ctx.fillRect(0, H - 120, W, 120)
+    ctx.font = `bold 26px ${font}`
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'
+    ctx.textAlign = 'center'
+    ctx.fillText('SHORTFLOW', W / 2, H - 50)
   }
 
-  // Scene indicator dots at bottom
   return canvas.toBuffer('image/png')
 }
 
@@ -245,7 +332,7 @@ async function buildVideo(scenes, title, audioPath, outputPath, tmpDir) {
   // Generate PNG for each scene
   const framePaths = []
   for (let i = 0; i < scenes.length; i++) {
-    const png = drawScene(scenes[i], title, i)
+    const png = drawScene(scenes[i], title, i, scenes.length)
     const framePath = path.join(tmpDir, `scene_${i}.png`)
     await fs.writeFile(framePath, png)
     framePaths.push({ path: framePath, duration: scenes[i].duration })
