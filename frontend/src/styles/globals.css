@@ -2,23 +2,39 @@
 
 /* ── DESIGN TOKENS ── */
 @theme {
-  --color-bg: #09090b;
-  --color-bg-card: rgba(24, 24, 27, 0.80);
-  --color-bg-elevated: rgba(39, 39, 42, 0.60);
-  --color-bg-hover: rgba(39, 39, 42, 0.40);
-  --color-border: rgba(63, 63, 70, 0.50);
-  --color-border-strong: rgba(82, 82, 91, 0.60);
-  --color-text: #fafafa;
-  --color-text-secondary: #a1a1aa;
-  --color-text-muted: #52525b;
+  --color-bg: #111118;
+  --color-bg-card: rgba(30, 30, 42, 0.85);
+  --color-bg-elevated: rgba(50, 50, 65, 0.60);
+  --color-bg-hover: rgba(60, 60, 80, 0.40);
+  --color-border: rgba(80, 80, 110, 0.45);
+  --color-border-strong: rgba(100, 100, 130, 0.55);
+  --color-text: #f0f0f5;
+  --color-text-secondary: #b0b0c0;
+  --color-text-muted: #6a6a80;
   --color-accent: #FF3B3B;
   --color-accent-hover: #ff5252;
-  --color-accent-muted: rgba(255, 59, 59, 0.12);
+  --color-accent-muted: rgba(255, 59, 59, 0.15);
   --color-green: #22c55e;
   --color-blue: #3b82f6;
   --color-amber: #f59e0b;
   --color-purple: #a855f7;
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* ── LEGACY VARIABLE ALIASES ── */
+/* Old pages use --text, --text3, --border, --accent, --bg2, --bg3, --bg4 */
+:root {
+  --text: var(--color-text);
+  --text2: var(--color-text-secondary);
+  --text3: var(--color-text-muted);
+  --border: var(--color-border);
+  --accent: var(--color-accent);
+  --bg: var(--color-bg);
+  --bg2: var(--color-bg-card);
+  --bg3: var(--color-bg-elevated);
+  --bg4: var(--color-bg-hover);
+  --ybg: rgba(245, 158, 11, 0.12);
+  --font-head: var(--font-sans);
 }
 
 /* ── BASE ── */

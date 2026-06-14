@@ -226,29 +226,46 @@ export default function Library() {
                 <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>🎬 Generate Video</div>
 
                 {/* Voice picker */}
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:12,fontWeight:600,color:'var(--text3)',marginBottom:8,textTransform:'uppercase',letterSpacing:.5}}>Choose Voice</div>
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'#b0b0c0',marginBottom:10,textTransform:'uppercase',letterSpacing:1}}>Choose Voice</div>
                   {/* Gender tabs */}
-                  <div style={{display:'flex',gap:6,marginBottom:10}}>
-                    {['male','female'].map(g => (
-                      <button key={g} onClick={()=>{
-                        const first = VOICES.find(v=>v.gender===g)
-                        if(first) setSelectedVoice(first.id)
-                      }}
-                      style={{padding:'4px 14px',borderRadius:20,border:'1.5px solid var(--border)',background: VOICES.find(v=>v.id===selectedVoice)?.gender===g ? 'var(--accent)':'transparent',color: VOICES.find(v=>v.id===selectedVoice)?.gender===g ?'#fff':'var(--text3)',fontSize:12,fontWeight:600,cursor:'pointer',textTransform:'capitalize'}}>
-                        {g === 'male' ? '👨 Male' : '👩 Female'}
-                      </button>
-                    ))}
+                  <div style={{display:'flex',gap:8,marginBottom:12}}>
+                    {['male','female'].map(g => {
+                      const isActive = VOICES.find(v=>v.id===selectedVoice)?.gender===g
+                      return (
+                        <button key={g} onClick={()=>{
+                          const first = VOICES.find(v=>v.gender===g)
+                          if(first) setSelectedVoice(first.id)
+                        }}
+                        style={{
+                          padding:'8px 20px',borderRadius:24,fontSize:13,fontWeight:700,cursor:'pointer',
+                          border: isActive ? '2px solid #FF3B3B' : '2px solid rgba(80,80,110,0.45)',
+                          background: isActive ? 'rgba(255,59,59,0.2)' : 'rgba(30,30,42,0.6)',
+                          color: isActive ? '#fff' : '#b0b0c0',
+                        }}>
+                          {g === 'male' ? '👨 Male' : '👩 Female'}
+                        </button>
+                      )
+                    })}
                   </div>
                   {/* Voice options */}
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
-                    {VOICES.filter(v => v.gender === (VOICES.find(v=>v.id===selectedVoice)?.gender || 'male')).map(v => (
-                      <div key={v.id} onClick={()=>setSelectedVoice(v.id)}
-                        style={{padding:'8px 12px',borderRadius:8,border:`1.5px solid ${selectedVoice===v.id?'var(--accent)':'var(--border)'}`,background:selectedVoice===v.id?'rgba(255,59,59,.1)':'transparent',cursor:'pointer'}}>
-                        <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{v.label}</div>
-                        <div style={{fontSize:11,color:'var(--text3)'}}>{v.description}</div>
-                      </div>
-                    ))}
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                    {VOICES.filter(v => v.gender === (VOICES.find(v=>v.id===selectedVoice)?.gender || 'male')).map(v => {
+                      const isActive = selectedVoice===v.id
+                      return (
+                        <div key={v.id} onClick={()=>setSelectedVoice(v.id)}
+                          style={{
+                            padding:'12px 14px',borderRadius:12,cursor:'pointer',textAlign:'center',
+                            border: isActive ? '2px solid #FF3B3B' : '2px solid rgba(80,80,110,0.3)',
+                            background: isActive ? 'rgba(255,59,59,0.15)' : 'rgba(30,30,42,0.5)',
+                            boxShadow: isActive ? '0 0 12px rgba(255,59,59,0.2)' : 'none',
+                          }}>
+                          <div style={{fontSize:24,marginBottom:4}}>{v.gender==='male' ? '🎙️' : '🎤'}</div>
+                          <div style={{fontSize:14,fontWeight:700,color: isActive ? '#fff' : '#e0e0e5'}}>{v.label}</div>
+                          <div style={{fontSize:11,color:'#8888a0',marginTop:2}}>{v.description}</div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
 
