@@ -155,14 +155,14 @@ function buildScenes(short) {
 
   // Add tip scenes (max 5 tips)
   tips.slice(0, 5).forEach(tip => {
-    // Clean up the text — take first 1-2 sentences, max 80 chars
+    // Clean up the text — take first 2-3 sentences, max 160 chars
     let text = tip.text
       .split(/[.!?]/)
       .filter(s => s.trim().length > 5)
-      .slice(0, 2)
+      .slice(0, 3)
       .join('. ')
       .trim()
-    if (text.length > 80) text = text.slice(0, 77) + '...'
+    if (text.length > 160) text = text.slice(0, 157) + '...'
     if (text.length > 10) {
       scenes.push({ text, isHook: false, isCta: false, stepNum: tip.num })
     }
@@ -280,46 +280,51 @@ function drawScene(scene, title, index, totalScenes) {
 
   } else if (scene.isHook) {
     // ── Hook: Large white text, vertically centered ──
-    ctx.font = `bold 62px ${font}`
+    const pad = 80
+    ctx.font = `bold 58px ${font}`
     ctx.fillStyle = '#FFFFFF'
     ctx.textAlign = 'center'
-    const hookLines = wrapText(ctx, scene.text, W - 120)
-    const lineH = 78
+    const hookLines = wrapText(ctx, scene.text, W - pad * 2)
+    const lineH = 76
     const totalH = hookLines.length * lineH
-    const startY = (H - totalH) / 2 + 30
-    hookLines.forEach((line, i) => {
+    const startY = (H - totalH) / 2
+    hookLines.slice(0, 6).forEach((line, i) => {
       ctx.fillText(line, W / 2, startY + i * lineH)
     })
 
     // Accent line below hook text
     ctx.fillStyle = accent
-    ctx.fillRect(W / 2 - 50, startY + totalH + 10, 100, 5)
+    ctx.fillRect(W / 2 - 50, startY + Math.min(hookLines.length, 6) * lineH + 15, 100, 5)
 
   } else {
-    // ── Step: Large number + text below ──
-    const centerY = H * 0.38
+    // ── Step: Number on left + text fills the space ──
+    const pad = 80
+
+    // Step label at top of content area
+    ctx.font = `bold 28px ${font}`
+    ctx.fillStyle = accent
+    ctx.textAlign = 'left'
+    ctx.fillText(`STEP ${scene.stepNum}`, pad, 280)
 
     // Big accent number
-    ctx.font = `bold 180px ${font}`
+    ctx.font = `bold 160px ${font}`
+    ctx.fillStyle = accent + '25'  // ghost number in background
+    ctx.textAlign = 'right'
+    ctx.fillText(`${scene.stepNum}`, W - 40, 420)
+
+    // Accent line under step label
     ctx.fillStyle = accent
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(`${scene.stepNum}`, W / 2, centerY)
-    ctx.textBaseline = 'alphabetic'
+    ctx.fillRect(pad, 295, 60, 4)
 
-    // Thin line separator
-    ctx.fillStyle = 'rgba(255,255,255,0.12)'
-    ctx.fillRect(W / 2 - 80, centerY + 110, 160, 2)
-
-    // Step text — large and bold
-    ctx.font = `bold 50px ${font}`
+    // Step text — large, left-aligned, wraps naturally
+    ctx.font = `bold 48px ${font}`
     ctx.fillStyle = '#FFFFFF'
-    ctx.textAlign = 'center'
-    const stepLines = wrapText(ctx, scene.text, W - 120)
-    const stepLineH = 65
-    const stepStartY = centerY + 155
-    stepLines.forEach((line, i) => {
-      ctx.fillText(line, W / 2, stepStartY + i * stepLineH)
+    ctx.textAlign = 'left'
+    const stepLines = wrapText(ctx, scene.text, W - pad * 2)
+    const stepLineH = 64
+    const stepStartY = 380
+    stepLines.slice(0, 8).forEach((line, i) => {
+      ctx.fillText(line, pad, stepStartY + i * stepLineH)
     })
   }
 
