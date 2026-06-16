@@ -208,170 +208,119 @@ function wrapText(ctx, text, maxWidth) {
 }
 
 // Color palettes per scene for visual variety
-const SCENE_PALETTES = [
-  { bg1: '#0F0C29', bg2: '#302B63', bg3: '#24243E', accent: '#FF3B3B' }, // Hook — deep purple
-  { bg1: '#000428', bg2: '#004E92', bg3: '#001F3F', accent: '#00D4FF' }, // Step 1 — ocean blue
-  { bg1: '#0F2027', bg2: '#203A43', bg3: '#2C5364', accent: '#00F5A0' }, // Step 2 — teal green
-  { bg1: '#1A0033', bg2: '#4A0072', bg3: '#2D004F', accent: '#C084FC' }, // Step 3 — purple
-  { bg1: '#0C1220', bg2: '#1E3A5F', bg3: '#0A1628', accent: '#FBD38D' }, // Step 4 — gold/navy
-  { bg1: '#200122', bg2: '#6F0000', bg3: '#3D0000', accent: '#FF6B6B' }, // Step 5 — deep red
-  { bg1: '#FF3B3B', bg2: '#FF6B6B', bg3: '#CC0000', accent: '#FFFFFF' }, // CTA — solid red
-]
+// ── Accent colors that cycle per step ──
+const STEP_ACCENTS = ['#FF3B3B', '#00D4FF', '#00F5A0', '#C084FC', '#FBD38D', '#FF6B6B', '#38BDF8']
 
 function drawScene(scene, title, index, totalScenes) {
   const canvas = createCanvas(W, H)
   const ctx = canvas.getContext('2d')
-  // CTA always gets the last palette (red), other scenes cycle through
-  const palette = scene.isCta
-    ? SCENE_PALETTES[SCENE_PALETTES.length - 1]
-    : SCENE_PALETTES[Math.min(index, SCENE_PALETTES.length - 2)]
   const font = `"${FONT_NAME}", sans-serif`
+  const accent = scene.isCta ? '#FF3B3B' : STEP_ACCENTS[index % STEP_ACCENTS.length]
 
-  // ── Background: rich gradient ──
-  const bgGrad = ctx.createLinearGradient(0, 0, W * 0.5, H)
-  bgGrad.addColorStop(0, palette.bg1)
-  bgGrad.addColorStop(0.5, palette.bg2)
-  bgGrad.addColorStop(1, palette.bg3)
-  ctx.fillStyle = bgGrad
+  // ── Same consistent background for all scenes ──
+  const bg = ctx.createLinearGradient(0, 0, 0, H)
+  bg.addColorStop(0, '#0f0f1a')
+  bg.addColorStop(0.5, '#141428')
+  bg.addColorStop(1, '#0a0a14')
+  ctx.fillStyle = bg
   ctx.fillRect(0, 0, W, H)
 
-  // ── Decorative glow circle (top-right) ──
-  const glowGrad = ctx.createRadialGradient(W * 0.85, H * 0.12, 0, W * 0.85, H * 0.12, 350)
-  glowGrad.addColorStop(0, palette.accent + '30')
-  glowGrad.addColorStop(1, 'transparent')
-  ctx.fillStyle = glowGrad
+  // Subtle radial glow behind center content
+  const glow = ctx.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, 500)
+  glow.addColorStop(0, accent + '18')
+  glow.addColorStop(1, 'transparent')
+  ctx.fillStyle = glow
   ctx.fillRect(0, 0, W, H)
 
-  // ── Decorative glow circle (bottom-left) ──
-  const glow2 = ctx.createRadialGradient(W * 0.15, H * 0.88, 0, W * 0.15, H * 0.88, 300)
-  glow2.addColorStop(0, palette.accent + '20')
-  glow2.addColorStop(1, 'transparent')
-  ctx.fillStyle = glow2
-  ctx.fillRect(0, 0, W, H)
+  // ── Progress dots at top ──
+  const dotY = 80
+  const dotR = 8
+  const dotGap = 28
+  const totalDotsW = totalScenes * dotGap
+  const dotStartX = (W - totalDotsW) / 2 + dotR
+  for (let i = 0; i < totalScenes; i++) {
+    ctx.beginPath()
+    ctx.arc(dotStartX + i * dotGap, dotY, dotR, 0, Math.PI * 2)
+    ctx.fillStyle = i === index ? accent : 'rgba(255,255,255,0.15)'
+    ctx.fill()
+  }
 
-  // ── Scene progress bar at very top ──
-  const barY = 60
-  const barW = W - 160
-  const barX = 80
-  ctx.fillStyle = 'rgba(255,255,255,0.1)'
-  roundRect(ctx, barX, barY, barW, 8, 4)
-  ctx.fill()
-  const progress = (index + 1) / totalScenes
-  ctx.fillStyle = palette.accent
-  roundRect(ctx, barX, barY, barW * progress, 8, 4)
-  ctx.fill()
+  // ── Title always at top (smaller, muted) ──
+  ctx.font = `bold 36px ${font}`
+  ctx.fillStyle = 'rgba(255,255,255,0.4)'
+  ctx.textAlign = 'center'
+  const shortTitle = title.length > 40 ? title.slice(0, 37) + '...' : title
+  ctx.fillText(shortTitle, W / 2, 160)
 
-  // ── Scene counter (01 / 05) ──
-  ctx.font = `bold 28px ${font}`
-  ctx.fillStyle = 'rgba(255,255,255,0.5)'
-  ctx.textAlign = 'right'
-  ctx.fillText(`${String(index + 1).padStart(2, '0')} / ${String(totalScenes).padStart(2, '0')}`, W - 80, barY + 55)
+  // ── Thin accent line under title ──
+  ctx.fillStyle = accent
+  ctx.fillRect(W / 2 - 40, 180, 80, 3)
 
   if (scene.isCta) {
-    // ── CTA scene — big bold centered ──
-    // Large accent circle behind text
-    const ctaGlow = ctx.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, 400)
-    ctaGlow.addColorStop(0, 'rgba(255,255,255,0.15)')
-    ctaGlow.addColorStop(1, 'transparent')
-    ctx.fillStyle = ctaGlow
-    ctx.fillRect(0, 0, W, H)
-
-    ctx.font = `bold 72px ${font}`
+    // ── CTA: Big centered text + subscribe prompt ──
+    ctx.font = `bold 68px ${font}`
     ctx.fillStyle = '#FFFFFF'
     ctx.textAlign = 'center'
-    const ctaLines = wrapText(ctx, scene.text, W - 160)
-    const ctaStartY = H * 0.4
+    const ctaLines = wrapText(ctx, scene.text, W - 140)
+    const ctaH = ctaLines.length * 85
+    const ctaY = (H - ctaH) / 2 + 40
     ctaLines.forEach((line, i) => {
-      ctx.fillText(line, W / 2, ctaStartY + i * 90)
+      ctx.fillText(line, W / 2, ctaY + i * 85)
     })
 
-    // Arrow / subscribe hint
-    ctx.font = `bold 36px ${font}`
-    ctx.fillStyle = 'rgba(255,255,255,0.7)'
-    ctx.fillText('SUBSCRIBE', W / 2, H * 0.72)
-
-    // Underline
+    // Subscribe button shape
+    const btnY = ctaY + ctaH + 50
+    roundRect(ctx, W / 2 - 180, btnY, 360, 70, 35)
+    ctx.fillStyle = '#FF3B3B'
+    ctx.fill()
+    ctx.font = `bold 32px ${font}`
     ctx.fillStyle = '#FFFFFF'
-    ctx.fillRect(W / 2 - 80, H * 0.72 + 12, 160, 4)
+    ctx.textAlign = 'center'
+    ctx.fillText('SUBSCRIBE', W / 2, btnY + 46)
+
+  } else if (scene.isHook) {
+    // ── Hook: Large white text, vertically centered ──
+    ctx.font = `bold 62px ${font}`
+    ctx.fillStyle = '#FFFFFF'
+    ctx.textAlign = 'center'
+    const hookLines = wrapText(ctx, scene.text, W - 120)
+    const lineH = 78
+    const totalH = hookLines.length * lineH
+    const startY = (H - totalH) / 2 + 30
+    hookLines.forEach((line, i) => {
+      ctx.fillText(line, W / 2, startY + i * lineH)
+    })
+
+    // Accent line below hook text
+    ctx.fillStyle = accent
+    ctx.fillRect(W / 2 - 50, startY + totalH + 10, 100, 5)
 
   } else {
-    // ── Title at top ──
-    ctx.font = `bold 44px ${font}`
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    // ── Step: Large number + text below ──
+    const centerY = H * 0.38
+
+    // Big accent number
+    ctx.font = `bold 180px ${font}`
+    ctx.fillStyle = accent
     ctx.textAlign = 'center'
-    const titleLines = wrapText(ctx, title.toUpperCase(), W - 160)
-    titleLines.slice(0, 2).forEach((line, i) => {
-      ctx.fillText(line, W / 2, 160 + i * 56)
+    ctx.textBaseline = 'middle'
+    ctx.fillText(`${scene.stepNum}`, W / 2, centerY)
+    ctx.textBaseline = 'alphabetic'
+
+    // Thin line separator
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'
+    ctx.fillRect(W / 2 - 80, centerY + 110, 160, 2)
+
+    // Step text — large and bold
+    ctx.font = `bold 50px ${font}`
+    ctx.fillStyle = '#FFFFFF'
+    ctx.textAlign = 'center'
+    const stepLines = wrapText(ctx, scene.text, W - 120)
+    const stepLineH = 65
+    const stepStartY = centerY + 155
+    stepLines.forEach((line, i) => {
+      ctx.fillText(line, W / 2, stepStartY + i * stepLineH)
     })
-
-    // ── Accent divider line under title ──
-    ctx.fillStyle = palette.accent
-    roundRect(ctx, W / 2 - 50, 170 + titleLines.slice(0, 2).length * 56, 100, 5, 3)
-    ctx.fill()
-
-    // ── Main content area ──
-    const contentY = H * 0.30
-    const contentH = H * 0.45
-    const pad = 70
-
-    if (scene.isHook) {
-      // Hook: large bold centered text
-      ctx.font = `bold 64px ${font}`
-      ctx.fillStyle = '#FFFFFF'
-      ctx.textAlign = 'center'
-      const hookLines = wrapText(ctx, scene.text, W - pad * 2)
-      const hookLineH = 80
-      const hookTotalH = hookLines.length * hookLineH
-      const hookStartY = contentY + (contentH - hookTotalH) / 2 + 50
-      hookLines.forEach((line, i) => {
-        ctx.fillText(line, W / 2, hookStartY + i * hookLineH)
-      })
-
-      // Accent underline under hook
-      const lastLineY = hookStartY + (hookLines.length - 1) * hookLineH + 20
-      ctx.fillStyle = palette.accent
-      ctx.fillRect(W / 2 - 60, lastLineY, 120, 6)
-
-    } else {
-      // Step scenes: number badge + text
-
-      // Big number badge (circle)
-      const badgeX = W / 2
-      const badgeY = contentY + 80
-      const badgeR = 65
-
-      // Circle background
-      ctx.beginPath()
-      ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2)
-      ctx.fillStyle = palette.accent
-      ctx.fill()
-
-      // Number in circle
-      ctx.font = `bold 72px ${font}`
-      ctx.fillStyle = '#FFFFFF'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(`${scene.stepNum}`, badgeX, badgeY)
-      ctx.textBaseline = 'alphabetic'
-
-      // Step text below badge
-      const textY = badgeY + badgeR + 60
-      ctx.font = `bold 52px ${font}`
-      ctx.fillStyle = '#FFFFFF'
-      ctx.textAlign = 'center'
-      const stepLines = wrapText(ctx, scene.text, W - pad * 2)
-      stepLines.forEach((line, i) => {
-        ctx.fillText(line, W / 2, textY + i * 68)
-      })
-    }
-
-    // ── Bottom branding bar ──
-    ctx.fillStyle = 'rgba(255,255,255,0.04)'
-    ctx.fillRect(0, H - 120, W, 120)
-    ctx.font = `bold 26px ${font}`
-    ctx.fillStyle = 'rgba(255,255,255,0.3)'
-    ctx.textAlign = 'center'
-    ctx.fillText('SHORTFLOW', W / 2, H - 50)
   }
 
   return canvas.toBuffer('image/png')
