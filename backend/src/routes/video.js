@@ -115,8 +115,11 @@ function buildScenes(short) {
   let tips = []
 
   // Try "Number one" pattern first
-  const numberWords = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 }
-  const wordMatches = [...rawScript.matchAll(/Number\s+(one|two|three|four|five|six|seven)\s*[—–\-:.]?\s*(.*?)(?=Number\s+(?:one|two|three|four|five|six|seven)|If you|These|Drop|Follow|$)/gi)]
+  const numberWords = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 }
+  const numWordPattern = 'one|two|three|four|five|six|seven|eight|nine|ten'
+  const wordMatches = [...rawScript.matchAll(new RegExp(
+    `Number\\s+(${numWordPattern})\\s*[—–\\-:.]?\\s*(.*?)(?=Number\\s+(?:${numWordPattern})|If you|These aren|These are|Drop a|Follow for|$)`, 'gi'
+  ))]
   if (wordMatches.length >= 2) {
     tips = wordMatches.map(m => ({
       num: numberWords[m[1].toLowerCase()] || 0,
@@ -153,31 +156,31 @@ function buildScenes(short) {
     tips = sentences.map((s, i) => ({ num: i + 1, text: s }))
   }
 
-  // Add tip scenes (max 5 tips)
-  tips.slice(0, 5).forEach(tip => {
-    // Clean up the text — take first 2-3 sentences, max 160 chars
-    let text = tip.text
-      .split(/[.!?]/)
-      .filter(s => s.trim().length > 5)
-      .slice(0, 3)
-      .join('. ')
-      .trim()
-    if (text.length > 160) text = text.slice(0, 157) + '...'
+  // Add ALL tip scenes (up to 10)
+  console.log(`[video] Parsed ${tips.length} tips from script`)
+  tips.slice(0, 10).forEach(tip => {
+    let text = tip.text.trim()
+    // Remove trailing incomplete sentences
+    if (text.length > 200) text = text.slice(0, 200)
+    // Keep it clean but don't over-truncate
     if (text.length > 10) {
+      console.log(`[video]   Tip ${tip.num}: ${text.slice(0, 60)}...`)
       scenes.push({ text, isHook: false, isCta: false, stepNum: tip.num })
     }
   })
 
   // ── Last scene: CTA ──
   const cta = short.cta || 'Follow for more tips!'
-  scenes.push({ text: cta.slice(0, 80), isHook: false, isCta: true, stepNum: null })
+  scenes.push({ text: cta.slice(0, 120), isHook: false, isCta: true, stepNum: null })
 
-  // Calculate timing — more time for steps, less for hook/CTA
-  const totalDuration = 58
-  const hookDur = 5
+  console.log(`[video] Total scenes: ${scenes.length} (1 hook + ${scenes.length - 2} steps + 1 CTA)`)
+
+  // Calculate timing — scale to fit all steps
+  const hookDur = 4
   const ctaDur = 5
   const stepCount = scenes.length - 2
-  const stepDur = stepCount > 0 ? Math.max((totalDuration - hookDur - ctaDur) / stepCount, 6) : 10
+  const stepDur = Math.max(7, Math.min(10, 50 / stepCount)) // 7-10s per step
+  const totalDuration = hookDur + (stepCount * stepDur) + ctaDur
 
   let time = 0
   return scenes.map((scene, i) => {
