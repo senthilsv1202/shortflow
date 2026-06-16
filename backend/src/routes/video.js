@@ -348,11 +348,66 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath()
 }
 
+// ── Get audio duration via FFmpeg ───────────────────────────────────────────
+
+function getAudioDuration(filePath) {
+  return new Promise((resolve) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err || !metadata) { resolve(5) } // fallback 5s
+      else { resolve(metadata.format.duration || 5) }
+    })
+  })
+}
+
+// ── Generate per-scene voiceovers ──────────────────────────────────────────
+
+async function generateSceneAudios(scenes, voiceId, tmpDir) {
+  const apiKey = process.env.ELEVENLABS_API_KEY
+  if (!apiKey) return scenes.map(s => ({ ...s, audioPath: null }))
+
+  const results = []
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i]
+    const audioFile = path.join(tmpDir, `scene_audio_${i}.mp3`)
+    try {
+      const buffer = await generateVoiceover(scene.text, voiceId)
+      await fs.writeFile(audioFile, buffer)
+      const duration = await getAudioDuration(audioFile)
+      console.log(`[video] Scene ${i} audio: ${duration.toFixed(1)}s — "${scene.text.slice(0, 40)}..."`)
+      results.push({ ...scene, audioPath: audioFile, duration: duration + 0.5 }) // +0.5s breathing room
+    } catch (err) {
+      console.warn(`[video] Scene ${i} audio failed: ${err.message}`)
+      results.push({ ...scene, audioPath: null }) // keep original fallback duration
+    }
+  }
+  return results
+}
+
+// ── FFmpeg: concat per-scene audios into one track ─────────────────────────
+
+async function concatAudios(scenes, outputPath, tmpDir) {
+  const audioScenes = scenes.filter(s => s.audioPath)
+  if (audioScenes.length === 0) return null
+
+  const listFile = path.join(tmpDir, 'audio_list.txt')
+  const listContent = audioScenes.map(s => `file '${s.audioPath}'`).join('\n')
+  await fs.writeFile(listFile, listContent)
+
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+      .input(listFile)
+      .inputOptions(['-f concat', '-safe 0'])
+      .outputOptions(['-c:a libmp3lame', '-b:a 192k'])
+      .output(outputPath)
+      .on('end', () => resolve(outputPath))
+      .on('error', (err) => { console.warn('[ffmpeg] audio concat error:', err.message); resolve(null) })
+      .run()
+  })
+}
+
 // ── FFmpeg video assembler ─────────────────────────────────────────────────
 
-async function buildVideo(scenes, title, audioPath, outputPath, tmpDir) {
-  const FPS = 30
-
+async function buildVideo(scenes, title, combinedAudioPath, outputPath, tmpDir) {
   // Generate PNG for each scene
   const framePaths = []
   for (let i = 0; i < scenes.length; i++) {
@@ -362,19 +417,22 @@ async function buildVideo(scenes, title, audioPath, outputPath, tmpDir) {
     framePaths.push({ path: framePath, duration: scenes[i].duration })
   }
 
-  // Write concat file for FFmpeg
+  // Write concat file — each frame shown for its scene duration
   const concatFile = path.join(tmpDir, 'concat.txt')
   const concatContent = framePaths.map(f =>
-    `file '${f.path}'\nduration ${f.duration}`
-  ).join('\n') + `\nfile '${framePaths[framePaths.length-1].path}'`
+    `file '${f.path}'\nduration ${f.duration.toFixed(2)}`
+  ).join('\n') + `\nfile '${framePaths[framePaths.length - 1].path}'`
   await fs.writeFile(concatFile, concatContent)
+
+  const totalDur = framePaths.reduce((sum, f) => sum + f.duration, 0)
+  console.log(`[video] Total video duration: ${totalDur.toFixed(1)}s`)
 
   return new Promise((resolve, reject) => {
     const cmd = ffmpeg()
       .input(concatFile)
       .inputOptions(['-f concat', '-safe 0'])
 
-    if (audioPath) cmd.input(audioPath)
+    if (combinedAudioPath) cmd.input(combinedAudioPath)
 
     cmd
       .outputOptions([
@@ -384,10 +442,10 @@ async function buildVideo(scenes, title, audioPath, outputPath, tmpDir) {
         '-pix_fmt yuv420p',
         '-r 30',
         '-movflags +faststart',
-        ...(audioPath ? ['-c:a aac', '-b:a 192k', '-shortest'] : []),
+        ...(combinedAudioPath ? ['-c:a aac', '-b:a 192k', '-shortest'] : []),
       ])
       .output(outputPath)
-      .on('start', c => console.log('[ffmpeg] started:', c.slice(0, 100)))
+      .on('start', c => console.log('[ffmpeg] started:', c.slice(0, 120)))
       .on('progress', p => console.log(`[ffmpeg] ${Math.round(p.percent || 0)}%`))
       .on('end', () => { console.log('[ffmpeg] done'); resolve() })
       .on('error', (err, stdout, stderr) => {
@@ -423,34 +481,31 @@ router.post('/generate/:shortId', requireAuth, async (req, res) => {
     const videoPath = path.join(tmpDir, 'output.mp4')
 
     try {
-      // Step 1: Voiceover
-      let voiceoverUrl = null
-      let localAudioPath = null
+      await ensureFont()
+      let scenes = buildScenes(short)
+      const title = short.title || short.topic || ''
 
-      if (process.env.ELEVENLABS_API_KEY) {
-        try {
-          console.log(`[video] Generating voiceover for ${shortId}`)
-          const scriptText = short.script || short.hook || short.title
-          const audioBuffer = await generateVoiceover(scriptText, voice_id)
-          await fs.writeFile(audioPath, audioBuffer)
-          localAudioPath = audioPath
-          voiceoverUrl = await uploadToSupabase(
-            req.supabase, audioBuffer,
-            `${req.user.id}/${shortId}/voiceover.mp3`, 'audio/mpeg'
-          )
-          await req.supabase.from('shorts').update({ voiceover_url: voiceoverUrl }).eq('id', shortId)
-          console.log(`[video] Voiceover ready`)
-        } catch (err) {
-          console.warn(`[video] Voiceover skipped: ${err.message}`)
-        }
+      // Step 1: Generate per-scene voiceovers and measure durations
+      console.log(`[video] Generating ${scenes.length} scene voiceovers for ${shortId}`)
+      scenes = await generateSceneAudios(scenes, voice_id, tmpDir)
+
+      // Step 2: Concat all scene audios into one track
+      const combinedAudioPath = path.join(tmpDir, 'combined.mp3')
+      let voiceoverUrl = null
+      const audioResult = await concatAudios(scenes, combinedAudioPath, tmpDir)
+      if (audioResult) {
+        const audioBuffer = await fs.readFile(combinedAudioPath)
+        voiceoverUrl = await uploadToSupabase(
+          req.supabase, audioBuffer,
+          `${req.user.id}/${shortId}/voiceover.mp3`, 'audio/mpeg'
+        )
+        await req.supabase.from('shorts').update({ voiceover_url: voiceoverUrl }).eq('id', shortId)
+        console.log(`[video] Combined voiceover uploaded`)
       }
 
-      // Step 2: Build video frames + assemble
+      // Step 3: Build video — each frame duration matches its audio
       console.log(`[video] Building 1080x1920 video for ${shortId}`)
-      await ensureFont()
-      const scenes = buildScenes(short)
-      const title = short.title || short.topic || ''
-      await buildVideo(scenes, title, localAudioPath, videoPath, tmpDir)
+      await buildVideo(scenes, title, audioResult, videoPath, tmpDir)
 
       // Step 3: Upload video
       console.log(`[video] Uploading video`)
