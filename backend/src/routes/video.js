@@ -210,125 +210,238 @@ function wrapText(ctx, text, maxWidth) {
   return lines
 }
 
-// Color palettes per scene for visual variety
-// ── Accent colors that cycle per step ──
-const STEP_ACCENTS = ['#FF3B3B', '#00D4FF', '#00F5A0', '#C084FC', '#FBD38D', '#FF6B6B', '#38BDF8']
+// ── Visual design system ───────────────────────────────────────────────────
+
+const ACCENTS = ['#FF3B3B', '#00D4FF', '#00F5A0', '#C084FC', '#FBD38D', '#FF6B6B', '#38BDF8']
+
+function drawBackground(ctx, accent, index) {
+  // Rich gradient that shifts slightly per scene
+  const hueShift = index * 8
+  const bg = ctx.createLinearGradient(0, 0, W, H)
+  bg.addColorStop(0, `hsl(${240 + hueShift}, 40%, 8%)`)
+  bg.addColorStop(0.5, `hsl(${250 + hueShift}, 35%, 12%)`)
+  bg.addColorStop(1, `hsl(${230 + hueShift}, 45%, 6%)`)
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, W, H)
+
+  // Large accent glow — top right
+  const g1 = ctx.createRadialGradient(W * 0.8, H * 0.15, 0, W * 0.8, H * 0.15, 500)
+  g1.addColorStop(0, accent + '22')
+  g1.addColorStop(0.6, accent + '08')
+  g1.addColorStop(1, 'transparent')
+  ctx.fillStyle = g1
+  ctx.fillRect(0, 0, W, H)
+
+  // Second glow — bottom left
+  const g2 = ctx.createRadialGradient(W * 0.2, H * 0.85, 0, W * 0.2, H * 0.85, 450)
+  g2.addColorStop(0, accent + '18')
+  g2.addColorStop(1, 'transparent')
+  ctx.fillStyle = g2
+  ctx.fillRect(0, 0, W, H)
+
+  // Scattered particles (small dots for texture)
+  ctx.fillStyle = 'rgba(255,255,255,0.03)'
+  const seed = index * 1000
+  for (let i = 0; i < 40; i++) {
+    const px = ((seed + i * 137) % W)
+    const py = ((seed + i * 271) % H)
+    const pr = 2 + (i % 4)
+    ctx.beginPath()
+    ctx.arc(px, py, pr, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Horizontal grid lines (very subtle)
+  ctx.strokeStyle = 'rgba(255,255,255,0.015)'
+  ctx.lineWidth = 1
+  for (let y = 200; y < H; y += 120) {
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(W, y)
+    ctx.stroke()
+  }
+}
+
+function drawProgressBar(ctx, index, total, accent) {
+  // Segmented progress bar at very top
+  const barY = 55
+  const pad = 60
+  const gap = 6
+  const totalW = W - pad * 2
+  const segW = (totalW - (total - 1) * gap) / total
+
+  for (let i = 0; i < total; i++) {
+    const x = pad + i * (segW + gap)
+    roundRect(ctx, x, barY, segW, 6, 3)
+    ctx.fillStyle = i <= index ? accent : 'rgba(255,255,255,0.12)'
+    ctx.fill()
+  }
+}
 
 function drawScene(scene, title, index, totalScenes) {
   const canvas = createCanvas(W, H)
   const ctx = canvas.getContext('2d')
   const font = `"${FONT_NAME}", sans-serif`
-  const accent = scene.isCta ? '#FF3B3B' : STEP_ACCENTS[index % STEP_ACCENTS.length]
+  const accent = scene.isCta ? '#FF3B3B' : ACCENTS[index % ACCENTS.length]
 
-  // ── Same consistent background for all scenes ──
-  const bg = ctx.createLinearGradient(0, 0, 0, H)
-  bg.addColorStop(0, '#0f0f1a')
-  bg.addColorStop(0.5, '#141428')
-  bg.addColorStop(1, '#0a0a14')
-  ctx.fillStyle = bg
-  ctx.fillRect(0, 0, W, H)
+  // ── Background with glows + particles ──
+  drawBackground(ctx, accent, index)
 
-  // Subtle radial glow behind center content
-  const glow = ctx.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, 500)
-  glow.addColorStop(0, accent + '18')
-  glow.addColorStop(1, 'transparent')
-  ctx.fillStyle = glow
-  ctx.fillRect(0, 0, W, H)
-
-  // ── Progress dots at top ──
-  const dotY = 80
-  const dotR = 8
-  const dotGap = 28
-  const totalDotsW = totalScenes * dotGap
-  const dotStartX = (W - totalDotsW) / 2 + dotR
-  for (let i = 0; i < totalScenes; i++) {
-    ctx.beginPath()
-    ctx.arc(dotStartX + i * dotGap, dotY, dotR, 0, Math.PI * 2)
-    ctx.fillStyle = i === index ? accent : 'rgba(255,255,255,0.15)'
-    ctx.fill()
-  }
-
-  // ── Title always at top (smaller, muted) ──
-  ctx.font = `bold 36px ${font}`
-  ctx.fillStyle = 'rgba(255,255,255,0.4)'
-  ctx.textAlign = 'center'
-  const shortTitle = title.length > 40 ? title.slice(0, 37) + '...' : title
-  ctx.fillText(shortTitle, W / 2, 160)
-
-  // ── Thin accent line under title ──
-  ctx.fillStyle = accent
-  ctx.fillRect(W / 2 - 40, 180, 80, 3)
+  // ── Progress bar ──
+  drawProgressBar(ctx, index, totalScenes, accent)
 
   if (scene.isCta) {
-    // ── CTA: Big centered text + subscribe prompt ──
-    ctx.font = `bold 68px ${font}`
-    ctx.fillStyle = '#FFFFFF'
-    ctx.textAlign = 'center'
-    const ctaLines = wrapText(ctx, scene.text, W - 140)
-    const ctaH = ctaLines.length * 85
-    const ctaY = (H - ctaH) / 2 + 40
-    ctaLines.forEach((line, i) => {
-      ctx.fillText(line, W / 2, ctaY + i * 85)
-    })
+    // ════════════════════════════════════════
+    // CTA SCENE — Full screen impact
+    // ════════════════════════════════════════
 
-    // Subscribe button shape
-    const btnY = ctaY + ctaH + 50
-    roundRect(ctx, W / 2 - 180, btnY, 360, 70, 35)
-    ctx.fillStyle = '#FF3B3B'
-    ctx.fill()
-    ctx.font = `bold 32px ${font}`
-    ctx.fillStyle = '#FFFFFF'
-    ctx.textAlign = 'center'
-    ctx.fillText('SUBSCRIBE', W / 2, btnY + 46)
+    // Big glow behind center
+    const ctaGlow = ctx.createRadialGradient(W / 2, H * 0.42, 0, W / 2, H * 0.42, 500)
+    ctaGlow.addColorStop(0, '#FF3B3B30')
+    ctaGlow.addColorStop(1, 'transparent')
+    ctx.fillStyle = ctaGlow
+    ctx.fillRect(0, 0, W, H)
 
-  } else if (scene.isHook) {
-    // ── Hook: Large white text, vertically centered ──
-    const pad = 80
-    ctx.font = `bold 58px ${font}`
+    // Main CTA text — huge and bold
+    ctx.font = `bold 72px ${font}`
     ctx.fillStyle = '#FFFFFF'
     ctx.textAlign = 'center'
-    const hookLines = wrapText(ctx, scene.text, W - pad * 2)
-    const lineH = 76
-    const totalH = hookLines.length * lineH
-    const startY = (H - totalH) / 2
-    hookLines.slice(0, 6).forEach((line, i) => {
+    const ctaLines = wrapText(ctx, scene.text, W - 120)
+    const lineH = 92
+    const totalH = ctaLines.length * lineH
+    const startY = H * 0.32
+    ctaLines.slice(0, 4).forEach((line, i) => {
       ctx.fillText(line, W / 2, startY + i * lineH)
     })
 
-    // Accent line below hook text
+    // Accent underline
+    ctx.fillStyle = '#FF3B3B'
+    const underY = startY + Math.min(ctaLines.length, 4) * lineH + 15
+    ctx.fillRect(W / 2 - 60, underY, 120, 5)
+
+    // Subscribe button
+    const btnY = H * 0.70
+    roundRect(ctx, W / 2 - 200, btnY, 400, 80, 40)
+    ctx.fillStyle = '#FF3B3B'
+    ctx.fill()
+    ctx.font = `bold 36px ${font}`
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillText('SUBSCRIBE', W / 2, btnY + 52)
+
+    // Bottom hint
+    ctx.font = `bold 28px ${font}`
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'
+    ctx.fillText('Like & Share if this helped!', W / 2, H - 120)
+
+  } else if (scene.isHook) {
+    // ════════════════════════════════════════
+    // HOOK SCENE — Attention grabber, fills screen
+    // ════════════════════════════════════════
+
+    // Title badge at top
+    const badgeW = Math.min(ctx.measureText(title).width + 60, W - 80)
+    roundRect(ctx, (W - badgeW) / 2, 100, badgeW, 50, 25)
+    ctx.fillStyle = accent + '30'
+    ctx.fill()
+    ctx.strokeStyle = accent + '60'
+    ctx.lineWidth = 1.5
+    roundRect(ctx, (W - badgeW) / 2, 100, badgeW, 50, 25)
+    ctx.stroke()
+    ctx.font = `bold 26px ${font}`
     ctx.fillStyle = accent
-    ctx.fillRect(W / 2 - 50, startY + Math.min(hookLines.length, 6) * lineH + 15, 100, 5)
+    ctx.textAlign = 'center'
+    ctx.fillText(title.length > 35 ? title.slice(0, 32) + '...' : title, W / 2, 133)
+
+    // Hook text — BIG, centered, fills the middle
+    ctx.font = `bold 64px ${font}`
+    ctx.fillStyle = '#FFFFFF'
+    ctx.textAlign = 'center'
+    const hookLines = wrapText(ctx, scene.text, W - 100)
+    const lineH = 82
+    const totalH = hookLines.length * lineH
+    const startY = (H - totalH) / 2 + 20
+    hookLines.slice(0, 7).forEach((line, i) => {
+      ctx.fillText(line, W / 2, startY + i * lineH)
+    })
+
+    // Animated-looking pulse ring at bottom
+    ctx.beginPath()
+    ctx.arc(W / 2, H - 180, 30, 0, Math.PI * 2)
+    ctx.strokeStyle = accent + '60'
+    ctx.lineWidth = 3
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(W / 2, H - 180, 50, 0, Math.PI * 2)
+    ctx.strokeStyle = accent + '25'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.font = `bold 22px ${font}`
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'
+    ctx.textAlign = 'center'
+    ctx.fillText('WATCH TILL THE END', W / 2, H - 110)
 
   } else {
-    // ── Step: Number on left + text fills the space ──
-    const pad = 80
+    // ════════════════════════════════════════
+    // STEP SCENE — Number + content, fills screen
+    // ════════════════════════════════════════
+    const pad = 65
 
-    // Step label at top of content area
-    ctx.font = `bold 28px ${font}`
+    // Top section: Step label + number
+    const topY = 120
+
+    // "STEP" label
+    ctx.font = `bold 24px ${font}`
     ctx.fillStyle = accent
     ctx.textAlign = 'left'
-    ctx.fillText(`STEP ${scene.stepNum}`, pad, 280)
+    ctx.fillText('STEP', pad, topY)
 
-    // Big accent number
-    ctx.font = `bold 160px ${font}`
-    ctx.fillStyle = accent + '25'  // ghost number in background
-    ctx.textAlign = 'right'
-    ctx.fillText(`${scene.stepNum}`, W - 40, 420)
-
-    // Accent line under step label
+    // Big number right next to STEP
+    ctx.font = `bold 120px ${font}`
     ctx.fillStyle = accent
-    ctx.fillRect(pad, 295, 60, 4)
+    ctx.textAlign = 'left'
+    const stepLabelW = ctx.measureText('STEP ').width
+    ctx.fillText(`${scene.stepNum}`, pad - 5, topY + 120)
 
-    // Step text — large, left-aligned, wraps naturally
-    ctx.font = `bold 48px ${font}`
+    // Accent line
+    ctx.fillStyle = accent
+    ctx.fillRect(pad, topY + 140, 80, 4)
+
+    // Giant ghost number in background (right side)
+    ctx.font = `bold 350px ${font}`
+    ctx.fillStyle = accent + '08'
+    ctx.textAlign = 'right'
+    ctx.fillText(`${scene.stepNum}`, W + 30, H * 0.55)
+
+    // Content card — glass morphism style
+    const cardY = topY + 180
+    const cardH = H - cardY - 160
+    const cardPad = 20
+
+    // Card background
+    roundRect(ctx, pad - cardPad, cardY, W - (pad - cardPad) * 2, cardH, 20)
+    ctx.fillStyle = 'rgba(255,255,255,0.04)'
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'
+    ctx.lineWidth = 1
+    roundRect(ctx, pad - cardPad, cardY, W - (pad - cardPad) * 2, cardH, 20)
+    ctx.stroke()
+
+    // Step text inside card — large, fills space
+    ctx.font = `bold 46px ${font}`
     ctx.fillStyle = '#FFFFFF'
     ctx.textAlign = 'left'
-    const stepLines = wrapText(ctx, scene.text, W - pad * 2)
-    const stepLineH = 64
-    const stepStartY = 380
-    stepLines.slice(0, 8).forEach((line, i) => {
-      ctx.fillText(line, pad, stepStartY + i * stepLineH)
+    const stepLines = wrapText(ctx, scene.text, W - pad * 2 - 20)
+    const stepLineH = 62
+    const textAreaH = cardH - 60
+    const maxLines = Math.floor(textAreaH / stepLineH)
+    const textStartY = cardY + 55
+    stepLines.slice(0, maxLines).forEach((line, i) => {
+      ctx.fillText(line, pad + 10, textStartY + i * stepLineH)
     })
+
+    // Bottom accent bar
+    ctx.fillStyle = accent
+    ctx.fillRect(pad, cardY + cardH - 6, 60, 4)
   }
 
   return canvas.toBuffer('image/png')
